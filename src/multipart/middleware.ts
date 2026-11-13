@@ -7,8 +7,6 @@ import type {
 import { parseMultipart } from "./parser.js";
 import { MultipartDisabledError } from "../errors/multipart.js";
 
-const DEFAULT_MULTIPART_OPTIONS: MultipartOptions = {};
-
 export function createMultipart(options: MultipartOptions = {}): MultipartMiddleware {
     const merged: MultipartOptions = {
         maxFileSize: options.maxFileSize,
@@ -71,13 +69,12 @@ export function expressMultipartMiddleware(options: MultipartOptions = {}) {
 
 export function fastifyMultipartMiddleware(options: MultipartOptions = {}) {
     const mp = createMultipart(options);
-    return async (req: unknown, reply: unknown) => {
-        const reqAny = req as any;
+    return async (_req: unknown, _reply: unknown) => {
+        const reqAny = _req as any;
         const raw = reqAny?.raw ?? reqAny;
         let source: unknown = raw;
         let headers: Record<string, string> | undefined;
 
-        // If body was already parsed as a buffer by Fastify, create a readable stream from it
         if (Buffer.isBuffer(reqAny?.body)) {
             source = Readable.from([reqAny.body]);
             headers = reqAny?.headers ?? {};

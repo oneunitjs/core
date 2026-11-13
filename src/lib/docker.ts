@@ -1,4 +1,3 @@
-import { createServer } from "node:http";
 import { connect } from "node:net";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -9,9 +8,7 @@ const DOCKER_SOCKET_PATH = "/var/run/docker.sock";
 
 function pingDockerSocket(timeoutMs: number = 3000): Promise<{ ok: boolean; version?: string; error?: string }> {
     return new Promise((resolve) => {
-        let timedOut = false;
-        const timer = setTimeout(() => {
-            timedOut = true;
+        setTimeout(() => {
             resolve({ ok: false, error: "timeout" });
         }, timeoutMs);
 
@@ -35,16 +32,11 @@ function pingDockerSocket(timeoutMs: number = 3000): Promise<{ ok: boolean; vers
         });
 
         socket.on("error", (err) => {
-            if (!timedOut) {
-                resolve({ ok: false, error: err.message });
-            }
+            resolve({ ok: false, error: err.message });
         });
 
         socket.on("timeout", () => {
-            if (!timedOut) {
-                timedOut = true;
-                socket.destroy();
-            }
+            socket.destroy();
         });
     });
 }

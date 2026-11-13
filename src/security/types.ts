@@ -1,5 +1,3 @@
-import type { HealthServer } from "../health/types.js";
-
 export type SecurityOptions = {
     enabled?: boolean;
 };

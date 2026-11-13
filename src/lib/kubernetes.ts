@@ -1,7 +1,5 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createServer } from "node:http";
-import { connect } from "node:net";
 import https from "node:https";
 
 const execFileAsync = promisify(execFile);
@@ -46,7 +44,6 @@ async function tryK8sAPI(timeoutMs: number = KUBECTL_TIMEOUT_MS): Promise<{
     const k8sHost = process.env["KUBERNETES_SERVICE_HOST"];
     const k8sPort = process.env["KUBERNETES_SERVICE_PORT"];
     const tokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token";
-    const caPath = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt";
 
     if (!k8sHost || !k8sPort) {
         return { ok: false, error: "no in-cluster K8s env vars" };
@@ -61,47 +58,27 @@ async function tryK8sAPI(timeoutMs: number = KUBECTL_TIMEOUT_MS): Promise<{
             token = undefined;
         }
 
-        const url = `https://${k8sHost}:${k8sPort}/version`;
+        const options: any = {
+            method: "GET",
+            hostname: k8sHost,
+            port: Number(k8sPort),
+            path: "/version",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            timeout: timeoutMs,
+            rejectUnauthorized: false,
+        };
 
         return new Promise<{ ok: boolean; error?: string }>((resolve) => {
-            let timedOut = false;
-            const timer = setTimeout(() => {
-                timedOut = true;
-                resolve({ ok: false, error: "timeout" });
-            }, timeoutMs);
-
-            const req = createServer(() => {}).listen(0);
-            req.close();
-
-            const options: any = {
-                method: "GET",
-                hostname: k8sHost,
-                port: Number(k8sPort),
-                path: "/version",
-                headers: token ? { Authorization: `Bearer ${token}` } : {},
-                timeout: timeoutMs,
-                rejectUnauthorized: false,
-            };
-
             const request = https.request(options, (res) => {
-                if (!timedOut) {
-                    clearTimeout(timer);
-                    resolve({ ok: res.statusCode !== undefined && res.statusCode < 500 });
-                }
+                resolve({ ok: res.statusCode !== undefined && res.statusCode < 500 });
             });
 
             request.on("error", (err) => {
-                if (!timedOut) {
-                    clearTimeout(timer);
-                    resolve({ ok: false, error: err.message });
-                }
+                resolve({ ok: false, error: err.message });
             });
 
             request.on("timeout", () => {
-                if (!timedOut) {
-                    timedOut = true;
-                    request.destroy();
-                }
+                request.destroy();
             });
 
             request.end();

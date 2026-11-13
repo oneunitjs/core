@@ -2,7 +2,6 @@ import type {
     HookListener,
     Hooks,
     HooksOptions,
-    HookAdapterSupport,
 } from "./type.js";
 import {
     DEFAULT_HOOKS,

@@ -1,4 +1,4 @@
-import type { HealthRegistry, HealthCheckResult, HealthServer, HealthRouteOptions } from "./types.js";
+import type { HealthRegistry, HealthServer, HealthRouteOptions } from "./types.js";
 import { createHealthRegistry } from "./registry.js";
 
 export { createHealthRegistry };

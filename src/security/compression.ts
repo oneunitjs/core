@@ -1,4 +1,4 @@
-import { createGzip, createDeflate, createBrotliCompress, constants } from "node:zlib";
+import { constants } from "node:zlib";
 import type { CompressionOptions } from "./types.js";
 export type { CompressionOptions };
 
@@ -88,10 +88,9 @@ export function createCompression(options: CompressionOptions = {}): Compression
 
             const chunks: Buffer[] = [];
             if (typeof resAny.write === "function" && typeof resAny.end === "function") {
-                const originalWrite = resAny.write.bind(resAny);
                 const originalEnd = resAny.end.bind(resAny);
 
-                resAny.write = (chunk: any, ...args: any[]): boolean => {
+                resAny.write = (chunk: any, ..._args: any[]): boolean => {
                     if (chunk) {
                         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
                     }

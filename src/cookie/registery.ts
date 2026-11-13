@@ -11,7 +11,6 @@ import type {
 } from "./types.js";
 import { DEFAULT_COOKIE_CONFIG, mergeCookieOptions } from "./configs.js";
 import { createExpressCookieAdapter } from "./adapters/express.js";
-import { createFastifyCookieAdapter } from "./adapters/fastify.js";
 import { createKoaCookieAdapter } from "./adapters/koa.js";
 import { createHttpCookieAdapter } from "./adapters/http.js";
 import {
@@ -21,7 +20,6 @@ import {
     SameSiteNoneRequiresSecureError,
 } from "../errors/cookie.js";
 
-const GCM_TAG_LENGTH = 16;
 const GCM_IV_LENGTH = 12;
 
 function deriveKey(secret: string, salt: string, keyLength: number = 32): Buffer {
@@ -269,7 +267,7 @@ export function createCookieStore(config: CookieConfig | string = {}): CookieSto
     const store: Map<string, CookieEntry> = new Map();
     const io: CookieIo = {
         read: (name) => store.get(name)?.value,
-        write: (name, value, _options) => {
+        write: (_name, _value, _options) => {
             // store.set already wrote to `store`; nothing extra needed
         },
         remove: (name) => store.delete(name),

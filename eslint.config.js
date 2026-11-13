@@ -1,4 +1,5 @@
 import tsParser from "@typescript-eslint/parser";
+import tseslint from "@typescript-eslint/eslint-plugin";
 
 export default [
     {
@@ -9,9 +10,12 @@ export default [
                 sourceType: "module",
             },
         },
+        plugins: {
+            "@typescript-eslint": tseslint,
+        },
         rules: {
             "no-console": "warn",
-            "no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+            "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
             "prefer-const": "error",
             "no-var": "error",
             "eqeqeq": ["error", "always", { null: "ignore" }],

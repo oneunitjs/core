@@ -91,7 +91,7 @@ export interface Sanitizer {
     sanitizeObject(obj: Record<string, unknown>, options?: SanitizeOptions): Record<string, unknown>;
 }
 
-export function createSanitizer(options: SanitizeOptions = {}): Sanitizer {
+export function createSanitizer(_options: SanitizeOptions = {}): Sanitizer {
     return {
         sanitize: (html: string, opts?: SanitizeOptions) => sanitizeHtmlContent(html, opts),
         sanitizeObject: (obj: Record<string, unknown>, opts?: SanitizeOptions) =>

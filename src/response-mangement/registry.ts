@@ -1,5 +1,4 @@
 import type {
-    ResponseOptions,
     SuccessOptions,
     ErrorOptions,
     ErrorResponseOptions,
@@ -14,26 +13,22 @@ import type {
     SuccessResponseName,
     PaginationMeta,
     ResponseHeaders,
-} from "./types.js";
-import {
-    HTTP_STATUS,
-    BODYLESS_STATUSES,
-    isBodylessStatus,
-    isClientError,
-    isServerError,
-    isSuccess,
-    isRedirection,
-} from "./types.js";
-import {
-    DEFAULT_RESPONSE_CONFIG,
-} from "./types.js";
-import type {
     ResponseFrameworkAdapter,
     FastifyLikeReply,
     ExpressLikeResponse,
     KoaLikeContext,
     HttpLikeServerResponse,
-} from "./adapters/types.js";
+} from "./types.js";
+// eslint-disable-next-line no-duplicate-imports -- verbatimModuleSyntax requires separate type/value imports
+import {
+    HTTP_STATUS,
+    isBodylessStatus,
+    isClientError,
+    isServerError,
+    isSuccess,
+    isRedirection,
+    DEFAULT_RESPONSE_CONFIG,
+} from "./types.js";
 import {
     createExpressAdapter,
     createFastifyAdapter,
@@ -65,7 +60,7 @@ export class ResponseManager {
         } as SuccessResponse<T>;
     }
 
-    error<T = unknown>(options: ErrorResponseOptions): ErrorResponse {
+    error(options: ErrorResponseOptions): ErrorResponse {
         validateStatus(options.status, "error");
 
         return {
@@ -172,7 +167,7 @@ export class ResponseFrameworkManager {
         return this.adapter.name;
     }
 
-    private sendEnvelope<T = unknown>(
+    private sendEnvelope(
         status: number,
         body: unknown,
         extraHeaders?: ResponseHeaders,
@@ -195,13 +190,13 @@ export class ResponseFrameworkManager {
         });
     }
 
-    success<T = unknown>(options: SuccessOptions<T> = {}): void {
+    success(options: SuccessOptions = {}): void {
         const response = this.manager.success(options);
         const status = options.status ?? HTTP_STATUS.OK;
         this.sendEnvelope(status, response, options.headers);
     }
 
-    error<T = unknown>(options: ErrorResponseOptions): void {
+    error(options: ErrorResponseOptions): void {
         const response = this.manager.error(options);
         this.sendEnvelope(options.status, response, options.headers);
     }
@@ -405,7 +400,7 @@ export function notFound<T = unknown>(
     createResponseFrameworkManager(manager, adapter).notFound(options);
 }
 
-export function error<T = unknown>(
+export function error(
     manager: ResponseManager,
     adapter: ResponseFrameworkAdapter,
     options: ErrorResponseOptions
