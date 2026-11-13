@@ -4,9 +4,9 @@
  * Simplified public API with chainable methods and direct access.
  *
  * ```ts
- * import { createSimpleApp } from "@oneunit/core";
+ * import { createApp } from "@oneunit/core";
  *
- * const app = createSimpleApp({
+ * const app = createApp({
  *   serviceName: "my-api",
  *   secret: "my-secret",
  *   security: { cors: { origin: "*" }, csrf: true, helmet: true },
@@ -32,7 +32,7 @@
  * ```
  */
 
-import { createApp, type AppOptions } from "./index.js";
+import { createApp as createCoreApp, type AppOptions } from "../core.js";
 import { createRateLimit } from "../security/rate-limit.js";
 import type { RateLimitMiddleware, RateLimitOptions } from "../security/types.js";
 import type { CorsOptions } from "../security/cors.js";
@@ -42,7 +42,7 @@ import type { CompressionOptions } from "../security/compression.js";
 import type { SanitizeOptions } from "../security/sanitize.js";
 import type { MultipartMiddleware, MultipartOptions } from "../multipart/index.js";
 
-export interface SimpleApp {
+export interface CoreApp {
   cors: (options?: CorsOptions) => any;
   csrf: (options?: CsrfOptions) => any;
   helmet: (options?: HelmetOptions) => any;
@@ -52,7 +52,7 @@ export interface SimpleApp {
   cookies: (req?: unknown, res?: unknown) => any;
   response: (req?: unknown, res?: unknown) => any;
   multipart: (options?: MultipartOptions) => MultipartMiddleware;
-  use: (middleware: (req: unknown, res: unknown, next?: () => void) => void | Promise<void>) => SimpleApp;
+  use: (middleware: (req: unknown, res: unknown, next?: () => void) => void | Promise<void>) => CoreApp;
   apply: (middleware: any, req: unknown, res: unknown, next?: () => void) => void;
   health: () => any;
   hooks: () => any;
@@ -62,12 +62,12 @@ export interface SimpleApp {
   lifecycle: () => any;
 }
 
-export function createSimpleApp(options?: AppOptions): SimpleApp {
-  const app = createApp(options);
+export function createApp(options?: AppOptions): CoreApp {
+  const app = createCoreApp(options);
 
   app.lifecycle().initialize();
 
-  const simpleApp: SimpleApp = {
+  const coreApp: CoreApp = {
     cors: (options) => app.security().cors(options),
     csrf: (options) => app.security().csrf(options),
     helmet: (options) => app.security().helmet(options),
@@ -83,7 +83,7 @@ export function createSimpleApp(options?: AppOptions): SimpleApp {
 
     use: (middleware) => {
       app.use(middleware);
-      return simpleApp;
+      return coreApp;
     },
 
     apply: (middleware, req, res, next) => {
@@ -98,5 +98,5 @@ export function createSimpleApp(options?: AppOptions): SimpleApp {
     lifecycle: () => app.lifecycle(),
   };
 
-  return simpleApp;
+  return coreApp;
 }

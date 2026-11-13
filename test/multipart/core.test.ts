@@ -3,16 +3,15 @@ import { createApp } from "../../src/core/index.js";
 
 describe("createApp - Multipart API", () => {
     it("exposes multipart() on the App", () => {
-        const core = createApp();
-        const mp = core.multipart();
+        const app = createApp();
+        const mp = app.multipart();
         expect(mp).toBeDefined();
-        expect(typeof mp.multipart).toBe("function");
+        expect(typeof mp.middleware).toBe("function");
     });
 
     it("creates multipart middleware via core", () => {
-        const core = createApp();
-        const mp = core.multipart();
-        const middleware = mp.multipart({ maxFileSize: 1024 * 1024 });
+        const app = createApp();
+        const middleware = app.multipart({ maxFileSize: 1024 * 1024 });
         expect(middleware.name).toBe("multipart");
         expect(middleware.enabled).toBe(true);
         expect(typeof middleware.middleware).toBe("function");
@@ -20,9 +19,8 @@ describe("createApp - Multipart API", () => {
     });
 
     it("multipart options are applied", () => {
-        const core = createApp();
-        const mp = core.multipart();
-        const middleware = mp.multipart({
+        const app = createApp();
+        const middleware = app.multipart({
             maxFileSize: 5 * 1024 * 1024,
             maxFiles: 3,
             allowedMimeTypes: ["image/png", "image/jpeg"],

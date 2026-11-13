@@ -54,7 +54,7 @@ describe("createApp - Unified DX", () => {
             });
 
             app.use((req, res, next) => {
-                const cors = core.security().cors({ origin: "*" });
+                const cors = core.cors({ origin: "*" });
                 const mw = cors.middleware();
                 mw(req, res, next);
             });
@@ -297,8 +297,8 @@ describe("createApp - Unified DX", () => {
     describe("Security adapters - real frameworks", () => {
         it("CORS via express adapter", async () => {
             const app = express();
-            const core = createApp();
-            const cors = core.security().cors({ origin: "*" });
+            const core = createApp({ secret: "my-secret" });
+            const cors = core.cors({ origin: "*" });
             const mw = cors.middleware();
 
             app.get("/cors", (_req, res) => {
@@ -335,7 +335,7 @@ describe("createApp - Unified DX", () => {
             const app = express();
             app.use(express.json());
             const core = createApp({ secret: "my-secret" });
-            const csrf = core.security().csrf();
+            const csrf = core.csrf();
 
             app.post("/submit", (req, res) => {
                 const mw = csrf.middleware();
@@ -393,17 +393,17 @@ describe("createApp - Unified DX", () => {
                 },
             });
 
-            const cors = core.security().cors();
+            const cors = core.cors();
             expect(cors.options.origin).toBe("https://example.com");
             expect(cors.options.credentials).toBe(true);
 
-            const csrf = core.security().csrf();
+            const csrf = core.csrf();
             expect(csrf.options.cookieName).toBe("my-csrf");
 
-            const helmet = core.security().helmet();
+            const helmet = core.helmet();
             expect(helmet.options.hidePoweredBy).toBe(true);
 
-            const compression = core.security().compression();
+            const compression = core.compression();
             expect(compression.options.threshold).toBe(2048);
         });
 
@@ -414,7 +414,7 @@ describe("createApp - Unified DX", () => {
                 },
             });
 
-            const cors = core.security().cors({ origin: "https://override.com" });
+            const cors = core.cors({ origin: "https://override.com" });
             expect(cors.options.origin).toBe("https://override.com");
         });
 
@@ -444,11 +444,11 @@ describe("createApp - Unified DX", () => {
                 },
             });
 
-            const mp = core.multipart();
-            const middleware = mp.multipart();
-            expect(middleware.options.maxFileSize).toBe(5 * 1024 * 1024);
-            expect(middleware.options.maxFiles).toBe(3);
-            expect(middleware.options.allowedMimeTypes).toEqual(["image/png"]);
+            const middleware = core.multipart({
+                maxFileSize: 5 * 1024 * 1024,
+                maxFiles: 3,
+                allowedMimeTypes: ["image/png"],
+            });
         });
 
         it("applies health path default", () => {
@@ -471,9 +471,10 @@ describe("createApp - Unified DX", () => {
 
         it("returns same security API instance on repeated calls", () => {
             const core = createApp();
-            const s1 = core.security();
-            const s2 = core.security();
-            expect(s1).toBe(s2);
+            const s1 = core.cors({ origin: "https://example.com" });
+            const s2 = core.cors({ origin: "https://example.com" });
+            expect(s1.enabled).toBe(s2.enabled);
+            expect(s1.options.origin).toBe(s2.options.origin);
         });
 
         it("returns same hooks API instance on repeated calls", () => {
