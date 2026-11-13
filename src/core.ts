@@ -90,6 +90,10 @@ import type {
 import type {
     MultipartOptions,
 } from "./multipart/types.js";
+import type {
+    ResponseFrameworkAdapter,
+    RespondOptions,
+} from "./response-mangement/types.js";
 
 import {
     createCors,
@@ -135,7 +139,6 @@ import {
 import type {
     ResponseOptions,
     ErrorOptions,
-    RespondOptions,
 } from "./response-mangement/types.js";
 
 import {
@@ -704,6 +707,7 @@ export function createApp(options?: AppOptions): App {
 
     let cachedResponseAdapter: any = null;
     let cachedResponseReqRes: { req: unknown; res: unknown } | null = null;
+    const memoryResponse: Record<string, any> = {};
 
     const responseAPI = (req?: unknown, res?: unknown): ResponseAPI => {
         if (req && res) {
@@ -728,7 +732,33 @@ export function createApp(options?: AppOptions): App {
         } else if (cachedResponseAdapter && cachedResponseReqRes) {
             // Return cached adapter-based API
         } else {
-            throw new ResponseRequiresRequestResponseError();
+            // Return a memory-based response adapter when no req/res provided
+            const memoryAdapter: ResponseFrameworkAdapter = {
+                name: "memory",
+                send(payload: RespondOptions<any>) {
+                    memoryResponse.status = payload.status;
+                    memoryResponse.body = payload.response?.data;
+                    memoryResponse.headers = payload.response?.headers;
+                },
+            };
+            const manager = createResponseManager();
+            const rfm = createResponseFrameworkManager(manager, memoryAdapter);
+
+            return {
+                ok(options) { rfm.ok(options); },
+                success(options) { rfm.success(options); },
+                created(options) { rfm.created(options); },
+                accepted(options) { rfm.accepted(options); },
+                noContent() { rfm.noContent(); },
+                badRequest(options) { rfm.badRequest(options); },
+                unauthorized(options) { rfm.unauthorized(options); },
+                forbidden(options) { rfm.forbidden(options); },
+                notFound(options) { rfm.notFound(options); },
+                conflict(options) { rfm.conflict(options); },
+                unprocessable(options) { rfm.unprocessable(options); },
+                internalServerError(options) { rfm.internalServerError(options); },
+                respond(options) { rfm.respond(options); },
+            };
         }
 
         const manager = createResponseManager();

@@ -1,4 +1,5 @@
 export { createApp } from "../core.js";
+export { createSimpleApp } from "./simple.js";
 export type {
     App,
     HealthAPI,
@@ -11,3 +12,4 @@ export type {
     LibAPI,
     AppOptions,
 } from "../core.js";
+export type { SimpleApp } from "./simple.js";
