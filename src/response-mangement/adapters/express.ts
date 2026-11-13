@@ -1,35 +1,28 @@
-import type { ExpressLikeResponse, ResponseFrameworkAdapter } from "./types.js";
+import type { ExpressLikeResponse } from "./types.js";
+import { createResponseAdapter } from "./adapter-base.js";
 import { isBodylessStatus } from "../types.js";
-import { ResponseAlreadySentError } from "../../errors/response.js";
 
-export function createExpressAdapter(res: ExpressLikeResponse): ResponseFrameworkAdapter {
-    return {
-        name: "express",
-
-        send({ status, body, headers }) {
-            if (res.headersSent) {
-                throw new ResponseAlreadySentError();
-            }
-
-            if (headers) {
-                for (const [name, value] of Object.entries(headers)) {
-                    if (Array.isArray(value)) {
-                        res.set(name, value.join(", "));
-                    } else {
-                        res.set(name, value);
-                    }
-                }
-            }
-
-            res.status(status);
-
-            if (isBodylessStatus(status)) {
+export function createExpressAdapter(res: ExpressLikeResponse) {
+    return createResponseAdapter("express", {
+        isSent() {
+            return Boolean(res.headersSent);
+        },
+        setHeader(name, value) {
+            res.set(name, value);
+        },
+        setStatus(code) {
+            res.status(code);
+        },
+        sendBodyless(code) {
+            if (isBodylessStatus(code)) {
                 res.end();
-                return;
             }
-
+        },
+        setContentType() {
             res.type("application/json");
+        },
+        sendBody(body) {
             res.json(body);
         },
-    };
+    });
 }

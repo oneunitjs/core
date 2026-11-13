@@ -15,10 +15,12 @@ import { createKoaCookieAdapter } from "./adapters/koa.js";
 import { createHttpCookieAdapter } from "./adapters/http.js";
 import {
     CookieSecretRequiredError,
-    InvalidCookieNameError,
     CookieSecurePrefixError,
-    SameSiteNoneRequiresSecureError,
 } from "../errors/cookie.js";
+import {
+    serializeCookieString,
+    validateCookieName,
+} from "./cookie-utils.js";
 
 const GCM_IV_LENGTH = 12;
 
@@ -72,19 +74,6 @@ function requiredSecret(secret: string | undefined, name: string, kind: string):
     return secret;
 }
 
-function sameSiteAttr(value: CookieOptions["sameSite"] | undefined): string | undefined {
-    if (value === undefined) return undefined;
-    if (typeof value === "string") return value.charAt(0).toUpperCase() + value.slice(1);
-    if (value === true) return "Strict";
-    return String(value);
-}
-
-function validateCookieName(name: string): void {
-    if (!name || /[=;\s]/.test(name)) {
-        throw new InvalidCookieNameError(name);
-    }
-}
-
 function hasSecurePrefix(name: string): boolean {
     return name.startsWith("__Secure-") || name.startsWith("__Host-");
 }
@@ -112,27 +101,13 @@ function serializeCookie(name: string, value: string, options: CookieOptions): s
         }
     }
 
-    if (options.sameSite === "none" && options.secure !== true) {
-        throw new SameSiteNoneRequiresSecureError();
-    }
-
-    const encoded = encodeURIComponent(value);
-    const parts: string[] = [`${name}=${encoded}`];
-    if (options.path) parts.push(`Path=${options.path}`);
-    if (options.domain) parts.push(`Domain=${options.domain}`);
-    if (options.maxAge !== undefined && options.maxAge !== 0) parts.push(`Max-Age=${options.maxAge}`);
-    if (options.expires) parts.push(`Expires=${options.expires.toUTCString()}`);
-    if (options.secure) parts.push("Secure");
-    if (options.httpOnly) parts.push("HttpOnly");
-    const ssite = sameSiteAttr(options.sameSite);
-    if (ssite) parts.push(`SameSite=${ssite}`);
-    return parts.join("; ");
+    return serializeCookieString(name, value, options);
 }
 
 interface CookieIo {
     read(name: string): string | undefined;
     write(name: string, value: string, options: CookieOptions): void;
-    remove(name: string, options: { path?: string; domain?: string }): void;
+    remove(name: string, options?: { path?: string; domain?: string }): void;
     clear(): void;
     snapshot(): Record<string, string>;
 }
@@ -267,9 +242,7 @@ export function createCookieStore(config: CookieConfig | string = {}): CookieSto
     const store: Map<string, CookieEntry> = new Map();
     const io: CookieIo = {
         read: (name) => store.get(name)?.value,
-        write: (_name, _value, _options) => {
-            // store.set already wrote to `store`; nothing extra needed
-        },
+        write: (_name, _value, _options) => {},
         remove: (name) => store.delete(name),
         clear: () => store.clear(),
         snapshot: () => Object.fromEntries([...store.entries()].map(([k, v]) => [k, v.value])),
@@ -285,7 +258,7 @@ export function createCookieStoreFromAdapter(adapter: CookieAdapter, config: Coo
     const io: CookieIo = {
         read: (name) => adapter.get(name),
         write: (name, value, options) => adapter.set(name, value, options),
-        remove: (name, options) => adapter.delete(name, options),
+        remove: (name, options) => adapter.delete(name, options ?? {}),
         clear: () => {},
         snapshot: () => adapter.getAll(),
     };

@@ -1,37 +1,28 @@
-import type { KoaLikeContext, ResponseFrameworkAdapter } from "./types.js";
+import type { KoaLikeContext } from "./types.js";
+import { createResponseAdapter } from "./adapter-base.js";
 import { isBodylessStatus } from "../types.js";
-import { ResponseAlreadySentError } from "../../errors/response.js";
 
-export function createKoaAdapter(ctx: KoaLikeContext): ResponseFrameworkAdapter {
-    return {
-        name: "koa",
-
-        send({ status, body, headers }) {
-            if (ctx.headerSent) {
-                throw new ResponseAlreadySentError();
-            }
-
-            ctx.status = status;
-
-            if (headers) {
-                for (const [name, value] of Object.entries(headers)) {
-                    if (Array.isArray(value)) {
-                        for (const v of value) {
-                            ctx.append(name, v);
-                        }
-                    } else {
-                        ctx.set(name, value);
-                    }
-                }
-            }
-
-            if (isBodylessStatus(status)) {
+export function createKoaAdapter(ctx: KoaLikeContext) {
+    return createResponseAdapter("koa", {
+        isSent() {
+            return Boolean(ctx.headerSent);
+        },
+        setHeader(name, value) {
+            ctx.set(name, value);
+        },
+        setStatus(code) {
+            ctx.status = code;
+        },
+        sendBodyless(code) {
+            if (isBodylessStatus(code)) {
                 ctx.body = null;
-                return;
             }
-
+        },
+        setContentType() {
             ctx.type = "application/json";
+        },
+        sendBody(body) {
             ctx.body = body;
         },
-    };
+    });
 }

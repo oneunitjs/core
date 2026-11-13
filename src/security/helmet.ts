@@ -1,5 +1,6 @@
 import type { HelmetOptions } from "./types.js";
 export type { HelmetOptions };
+import { createSecurityMiddlewareBase } from "./middleware-base.js";
 
 const DEFAULT_HELMET_OPTIONS: HelmetOptions = {
     contentSecurityPolicy: false,
@@ -45,8 +46,6 @@ export function createHelmet(options: HelmetOptions = {}): HelmetMiddleware {
         permittedCrossDomainPolicies: options.permittedCrossDomainPolicies,
         permittedCrossDomainPoliciesHeaderOnly: options.permittedCrossDomainPoliciesHeaderOnly,
     };
-
-    let enabled = true;
 
     function headers(): Record<string, string> {
         const h: Record<string, string> = {};
@@ -145,32 +144,26 @@ export function createHelmet(options: HelmetOptions = {}): HelmetMiddleware {
         return h;
     }
 
-    function middleware(): (req: any, res: any, next?: () => void) => void {
-        return (req: any, res: any, next?: () => void) => {
-            if (!enabled) {
-                if (next) next();
-                return;
+    const coreMiddleware = (req: any, res: any, next?: () => void) => {
+        const h = headers();
+        for (const [key, value] of Object.entries(h)) {
+            if (typeof res === "object" && res !== null && "setHeader" in res) {
+                (res as any).setHeader(key, value);
             }
+        }
+        if (next) next();
+    };
 
-            const h = headers();
-            for (const [key, value] of Object.entries(h)) {
-                if (typeof res === "object" && res !== null && "setHeader" in res) {
-                    (res as any).setHeader(key, value);
-                }
-            }
-
-            if (next) next();
-        };
-    }
+    const base = createSecurityMiddlewareBase("helmet", merged as Record<string, unknown>, coreMiddleware);
 
     return {
-        name: "helmet",
-        get enabled() { return enabled; },
-        get options() { return { ...merged }; },
-        enable() { enabled = true; },
-        disable() { enabled = false; },
-        toggle() { enabled = !enabled; },
-        middleware,
+        name: base.name,
+        get enabled() { return base.enabled; },
+        get options() { return base.options; },
+        enable() { base.enable(); },
+        disable() { base.disable(); },
+        toggle() { base.toggle(); },
+        middleware: () => base.middleware(),
         headers,
-    };
+    } as HelmetMiddleware;
 }

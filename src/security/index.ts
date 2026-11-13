@@ -8,6 +8,7 @@ export {
 } from "./sanitize.js";
 export { createCompression, type CompressionMiddleware, type CompressionOptions } from "./compression.js";
 export { createHelmet, type HelmetMiddleware, type HelmetOptions } from "./helmet.js";
+export { createSecurityMiddlewareBase } from "./middleware-base.js";
 
 export type {
     SecurityMiddleware,

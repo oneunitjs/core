@@ -1,36 +1,32 @@
-import type { HttpLikeServerResponse, ResponseFrameworkAdapter } from "./types.js";
+import type { HttpLikeServerResponse } from "./types.js";
+import { createResponseAdapter } from "./adapter-base.js";
 import { isBodylessStatus } from "../types.js";
-import { ResponseAlreadySentError } from "../../errors/response.js";
 
-export function createHttpAdapter(res: HttpLikeServerResponse): ResponseFrameworkAdapter {
-    return {
-        name: "http",
-
-        send({ status, body, headers }) {
-            if (res.headersSent || res.writableEnded) {
-                throw new ResponseAlreadySentError();
-            }
-
-            const allHeaders: Record<string, string> = {};
-            if (headers) {
-                for (const [name, value] of Object.entries(headers)) {
-                    if (Array.isArray(value)) {
-                        allHeaders[name] = value.join(", ");
-                    } else {
-                        allHeaders[name] = value;
-                    }
-                }
-            }
-
-            if (isBodylessStatus(status)) {
-                res.writeHead(status, allHeaders);
+export function createHttpAdapter(res: HttpLikeServerResponse) {
+    let statusCode = 200;
+    const allHeaders: Record<string, string> = {};
+    return createResponseAdapter("http", {
+        isSent() {
+            return Boolean(res.headersSent || res.writableEnded);
+        },
+        setHeader(name, value) {
+            allHeaders[name] = value;
+        },
+        setStatus(code) {
+            statusCode = code;
+        },
+        sendBodyless() {
+            if (isBodylessStatus(statusCode)) {
+                res.writeHead(statusCode, allHeaders);
                 res.end();
-                return;
             }
-
+        },
+        setContentType() {
             allHeaders["content-type"] = "application/json";
-            res.writeHead(status, allHeaders);
+        },
+        sendBody(body) {
+            res.writeHead(statusCode, allHeaders);
             res.end(JSON.stringify(body));
         },
-    };
+    });
 }

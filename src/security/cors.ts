@@ -1,5 +1,6 @@
 import type { CorsOptions } from "./types.js";
 export type { CorsOptions };
+import { createSecurityMiddlewareBase } from "./middleware-base.js";
 
 const DEFAULT_CORS_OPTIONS: CorsOptions = {
     origin: "*",
@@ -11,17 +12,6 @@ const DEFAULT_CORS_OPTIONS: CorsOptions = {
     preflightContinue: false,
     optionsSuccessStatus: 204,
 };
-
-export interface CorsMiddleware {
-    name: string;
-    enabled: boolean;
-    options: CorsOptions;
-    enable(): void;
-    disable(): void;
-    toggle(): void;
-    middleware(): (req: unknown, res: unknown, next?: () => void) => void;
-    headers(): Record<string, string>;
-}
 
 type OriginValue = string | string[] | boolean;
 
@@ -49,6 +39,17 @@ function resolveOrigin(origin: string | undefined, allowed: OriginValue): string
     return null;
 }
 
+export interface CorsMiddleware {
+    name: string;
+    enabled: boolean;
+    options: CorsOptions;
+    enable(): void;
+    disable(): void;
+    toggle(): void;
+    middleware(): (req: unknown, res: unknown, next?: () => void) => void;
+    headers(): Record<string, string>;
+}
+
 export function createCors(options: CorsOptions = {}): CorsMiddleware {
     const merged: CorsOptions = {
         origin: options.origin ?? DEFAULT_CORS_OPTIONS.origin,
@@ -61,8 +62,6 @@ export function createCors(options: CorsOptions = {}): CorsMiddleware {
         optionsSuccessStatus: options.optionsSuccessStatus ?? DEFAULT_CORS_OPTIONS.optionsSuccessStatus,
     };
 
-    let enabled = true;
-
     function headers(originHeader: string | undefined): Record<string, string> {
         const h: Record<string, string> = {};
 
@@ -71,7 +70,6 @@ export function createCors(options: CorsOptions = {}): CorsMiddleware {
             h["Access-Control-Allow-Origin"] = resolvedOrigin === "*" ? "*" : resolvedOrigin;
         }
 
-        // When credentials are true, origin cannot be "*" per spec; reflect the request origin instead
         if (merged.credentials && merged.origin === "*" && originHeader) {
             h["Access-Control-Allow-Origin"] = originHeader;
         }
@@ -95,55 +93,50 @@ export function createCors(options: CorsOptions = {}): CorsMiddleware {
         return h;
     }
 
-    function middleware(): (req: any, res: any, next?: () => void) => void {
-        return (req: any, res: any, next?: () => void) => {
-            if (!enabled) {
-                if (next) next();
+    const coreMiddleware = (req: any, res: any, next?: () => void) => {
+        const originHeader = req?.headers?.origin;
+        const h = headers(originHeader);
+
+        for (const [key, value] of Object.entries(h)) {
+            res.setHeader(key, value);
+        }
+
+        const method = req?.method;
+        const isPreflight = method === "OPTIONS";
+
+        if (isPreflight) {
+            const originAllowed = isOriginAllowed(originHeader, merged.origin as OriginValue);
+            if (!originAllowed && merged.origin !== "*") {
+                res.statusCode = 403;
+                res.end(JSON.stringify({ error: "CORS origin not allowed" }));
                 return;
             }
-
-            const originHeader = req?.headers?.origin;
-            const h = headers(originHeader);
-
-            for (const [key, value] of Object.entries(h)) {
-                res.setHeader(key, value);
-            }
-
-            const method = req?.method;
-            const isPreflight = method === "OPTIONS";
-
-            if (isPreflight) {
-                const originAllowed = isOriginAllowed(originHeader, merged.origin as OriginValue);
-                if (!originAllowed && merged.origin !== "*") {
-                    res.statusCode = 403;
-                    res.end(JSON.stringify({ error: "CORS origin not allowed" }));
-                    return;
-                }
-                if (merged.preflightContinue && next) {
-                    next();
-                    return;
-                }
-                if (res && typeof res.statusCode === "number") {
-                    res.statusCode = merged.optionsSuccessStatus ?? 204;
-                }
-                if (typeof res.end === "function") {
-                    res.end();
-                }
+            if (merged.preflightContinue && next) {
+                next();
                 return;
             }
+            if (res && typeof res.statusCode === "number") {
+                res.statusCode = merged.optionsSuccessStatus ?? 204;
+            }
+            if (typeof res.end === "function") {
+                res.end();
+            }
+            return;
+        }
 
-            if (next) next();
-        };
-    }
+        if (next) next();
+    };
+
+    const base = createSecurityMiddlewareBase("cors", merged as Record<string, unknown>, coreMiddleware);
 
     return {
-        name: "cors",
-        get enabled() { return enabled; },
-        get options() { return { ...merged }; },
-        enable() { enabled = true; },
-        disable() { enabled = false; },
-        toggle() { enabled = !enabled; },
-        middleware,
+        name: base.name,
+        get enabled() { return base.enabled; },
+        get options() { return base.options; },
+        enable() { base.enable(); },
+        disable() { base.disable(); },
+        toggle() { base.toggle(); },
+        middleware: () => base.middleware(),
         headers: () => headers(undefined),
-    };
+    } as CorsMiddleware;
 }
