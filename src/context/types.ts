@@ -8,6 +8,12 @@
 export interface RequestContextOptions {
     /** Initial values to set in the context when created */
     initialValues?: Record<string, unknown>;
+    /** Automatically add a timestamp to each run() call (default: false) */
+    autoTimestamp?: boolean;
+    /** Key name for the timestamp value (default: "timestamp") */
+    timestampKey?: string;
+    /** Format for the timestamp value (default: "iso") */
+    timestampFormat?: "iso" | "unix" | "unix-ms";
 }
 
 export interface RequestContext {

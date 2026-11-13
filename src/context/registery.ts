@@ -9,13 +9,18 @@
  * ```ts
  * import { createRequestContext } from "@oneunit/core";
  *
- * // Create a context instance
- * const ctx = createRequestContext();
+ * // Create a context instance with auto timestamp
+ * const ctx = createRequestContext({
+ *   autoTimestamp: true,
+ *   timestampKey: "requestTime",
+ *   timestampFormat: "iso",
+ * });
  *
  * // Use within an async request handler
- * await ctx.run({ requestId: "req-123", userId: "user-456" }, async () => {
+ * await ctx.run({ requestId: "req-123" }, async () => {
  *   const id = ctx.get("requestId");
- *   console.log(`Request ID: ${id}`); // "Request ID: req-123"
+ *   const ts = ctx.get("timestamp"); // ISO timestamp added automatically
+ *   console.log(`Request ID: ${id}, Time: ${ts}`);
  * });
  *
  * // Disable context tracking
@@ -48,7 +53,7 @@ import type { RequestContext, RequestContextOptions } from "./types.js";
  * ```
  */
 export function createRequestContext(
-    _options?: RequestContextOptions,
+    options?: RequestContextOptions,
 ): RequestContext & {
     run: <R = unknown>(fn: () => R | Promise<R>, values?: Record<string, unknown>) => Promise<R>;
     enable(): void;
@@ -56,10 +61,35 @@ export function createRequestContext(
 } {
     const store = new AsyncLocalStorage<Map<string, unknown>>();
     let enabled = true;
+    const autoTimestamp: boolean = options?.autoTimestamp ?? false;
+    const timestampKey: string = options?.timestampKey ?? "timestamp";
+    const timestampFormat: string = options?.timestampFormat ?? "iso";
 
     function getContext(): Map<string, unknown> | undefined {
         if (!enabled) return undefined;
         return store.getStore();
+    }
+
+    function addTimestamp(values: Map<string, unknown>): void {
+        if (!autoTimestamp) return;
+        const key = timestampKey;
+        if (values.has(key)) return;
+
+        const now = new Date();
+        let timestamp: string | number;
+        switch (timestampFormat) {
+            case "unix":
+                timestamp = Math.floor(now.getTime() / 1000);
+                break;
+            case "unix-ms":
+                timestamp = now.getTime();
+                break;
+            case "iso":
+            default:
+                timestamp = now.toISOString();
+                break;
+        }
+        values.set(key, timestamp);
     }
 
     return {
@@ -100,6 +130,7 @@ export function createRequestContext(
             values?: Record<string, unknown>,
         ): Promise<R> {
             const ctx = new Map<string, unknown>(Object.entries(values ?? {}));
+            addTimestamp(ctx);
             return store.run(ctx, fn);
         },
         enable() {
