@@ -105,6 +105,19 @@ import {
 } from "./multipart/index.js";
 
 import {
+    LifecycleManager,
+    type LifecycleOptions,
+    type LifecycleState,
+    type LifecycleMode,
+    type MiddlewareRegistration,
+    type PluginRegistration,
+    type ConflictInfo,
+    type MiddlewareResult,
+    type PluginResult,
+    type PluginContext,
+} from "./lifecycle/index.js";
+
+import {
     createMsgPack,
 } from "./msgpack/index.js";
 
@@ -152,6 +165,7 @@ export interface App {
     security(): SecurityAPI;
     msgpack(): MsgPackAPI;
     multipart(): MultipartAPI;
+    lifecycle(): LifecycleAPI;
     response(_req?: unknown, _res?: unknown): ResponseAPI;
     lib(): LibAPI;
     use(_middleware: (_req: unknown, _res: unknown, _next?: () => void) => void | Promise<void>): App;
@@ -227,6 +241,61 @@ export interface MultipartAPI {
     multipart(_options?: MultipartOptions): MultipartMiddleware;
 }
 
+export interface LifecycleAPI {
+    mode(): LifecycleMode;
+    setMode(_mode: LifecycleMode): { success: boolean; conflicts: ConflictInfo[]; error?: string };
+    initialize(): { success: boolean; conflicts: ConflictInfo[]; error?: string };
+    registerMiddleware(
+        _name: string,
+        _type: string,
+        _middleware: (req: unknown, res: unknown, next?: () => void) => void | Promise<void>,
+        _options?: { priority?: number; conflictTypes?: string[]; version?: string },
+    ): { success: boolean; conflicts: ConflictInfo[]; error?: string };
+    unregisterMiddleware(_name: string): boolean;
+    registerPlugin(
+        _name: string,
+        _namespace: string,
+        _hooks: Record<string, Array<(context: unknown) => void | Promise<void>>>,
+        _options?: { priority?: number; version?: string },
+    ): { success: boolean; conflicts: ConflictInfo[]; error?: string };
+    unregisterPlugin(_name: string, _namespace: string): boolean;
+    executeMiddleware(
+        _name: string,
+        _req: unknown,
+        _res: unknown,
+        _phase?: "request" | "response" | "error",
+    ): Promise<MiddlewareResult>;
+    executeMiddlewareChain(
+        _req: unknown,
+        _res: unknown,
+        _phase?: "request" | "response" | "error",
+    ): Promise<MiddlewareResult[]>;
+    executeHook(
+        _hookName: string,
+        _context: unknown,
+    ): Promise<PluginResult[]>;
+    executeHookIsolated(
+        _hookName: string,
+        _context: unknown,
+        _namespace: string,
+    ): Promise<PluginResult>;
+    getState(): LifecycleState;
+    getMiddlewareList(): MiddlewareRegistration[];
+    getPluginList(): PluginRegistration[];
+    getNamespaces(): string[];
+    hasMiddleware(_name: string): boolean;
+    hasPlugin(_name: string, _namespace: string): boolean;
+    clear(): void;
+    isSafe(): boolean;
+    getValidationReport(): {
+        safe: boolean;
+        conflicts: ConflictInfo[];
+        warnings: ConflictInfo[];
+        errors: ConflictInfo[];
+    };
+    createPluginContext(_name: string, _namespace: string): PluginContext;
+}
+
 export interface MsgPackAPI {
     encode(_value: unknown): Uint8Array;
     decode<T = unknown>(_data: Uint8Array | ArrayBuffer): T;
@@ -272,6 +341,7 @@ export interface AppOptions {
     health?: {
         path?: string;
     };
+    lifecycle?: LifecycleOptions;
 }
 
 export function createApp(options?: AppOptions): App {
@@ -488,6 +558,56 @@ export function createApp(options?: AppOptions): App {
         },
     };
 
+    const lifecycleManager = new LifecycleManager({
+        mode: options?.lifecycle?.mode ?? "advanced",
+        executionTimeoutMs: options?.lifecycle?.executionTimeoutMs,
+        throwOnError: options?.lifecycle?.throwOnError,
+        maxMiddleware: options?.lifecycle?.maxMiddleware,
+        maxPlugins: options?.lifecycle?.maxPlugins,
+        allowedMiddlewareTypes: options?.lifecycle?.allowedMiddlewareTypes,
+        autoRegisterEssential: options?.lifecycle?.autoRegisterEssential,
+    });
+
+    lifecycleManager.initialize();
+
+    const lifecycleAPI: LifecycleAPI = {
+        mode() { return lifecycleManager.getMode(); },
+        setMode(mode) { return lifecycleManager.setMode(mode); },
+        initialize() { return lifecycleManager.initialize(); },
+        registerMiddleware(name, type, middleware, opts) {
+            return lifecycleManager.registerMiddleware(name, type, middleware, opts);
+        },
+        unregisterMiddleware(name) { return lifecycleManager.unregisterMiddleware(name); },
+        registerPlugin(name, namespace, hooks, opts) {
+            return lifecycleManager.registerPlugin(name, namespace, hooks, opts);
+        },
+        unregisterPlugin(name, namespace) { return lifecycleManager.unregisterPlugin(name, namespace); },
+        async executeMiddleware(name, req, res, phase) {
+            return lifecycleManager.executeMiddleware(name, req, res, phase);
+        },
+        async executeMiddlewareChain(req, res, phase) {
+            return lifecycleManager.executeMiddlewareChain(req, res, phase);
+        },
+        async executeHook(hookName, context) {
+            return lifecycleManager.executeHook(hookName, context);
+        },
+        async executeHookIsolated(hookName, context, namespace) {
+            return lifecycleManager.executeHookIsolated(hookName, context, namespace);
+        },
+        getState() { return lifecycleManager.getState(); },
+        getMiddlewareList() { return lifecycleManager.getMiddlewareList(); },
+        getPluginList() { return lifecycleManager.getPluginList(); },
+        getNamespaces() { return lifecycleManager.getNamespaces(); },
+        hasMiddleware(name) { return lifecycleManager.hasMiddleware(name); },
+        hasPlugin(name, namespace) { return lifecycleManager.hasPlugin(name, namespace); },
+        clear() { lifecycleManager.clear(); },
+        isSafe() { return lifecycleManager.isSafe(); },
+        getValidationReport() { return lifecycleManager.getValidationReport(); },
+        createPluginContext(name, namespace) {
+            return lifecycleManager.createPluginContext(name, namespace);
+        },
+    };
+
     const msgpack = createMsgPack();
 
     const msgpackAPI: MsgPackAPI = {
@@ -580,6 +700,7 @@ export function createApp(options?: AppOptions): App {
         cookies: cookieStoreAPI,
         security: () => securityAPI,
         multipart: () => multipartAPI,
+        lifecycle: () => lifecycleAPI,
         msgpack: () => msgpackAPI,
         response: responseAPI,
         lib: () => libAPI,
