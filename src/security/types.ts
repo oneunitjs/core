@@ -121,6 +121,31 @@ export interface SecurityResult {
     message?: string;
 }
 
+export interface RateLimitMiddleware extends SecurityMiddleware {
+    middleware(): (req: unknown, res: unknown, next?: () => void) => void;
+    getRateLimitInfo(key: string): RateLimitInfo | null;
+    resetKey(key: string): void;
+    resetAll(): void;
+}
+
+export interface RateLimitOptions {
+    windowMs?: number;
+    maxRequests?: number;
+    keyGenerator?: (req: unknown) => string;
+    message?: string;
+    statusCode?: number;
+    includeRetryAfter?: boolean;
+    skipFailedRequests?: boolean;
+    skipSuccessfulRequests?: boolean;
+}
+
+export interface RateLimitInfo {
+    totalRequests: number;
+    remaining: number;
+    resetTime: number;
+    limited: boolean;
+}
+
 export interface SecurityProvider {
     name: string;
     enabled: boolean;

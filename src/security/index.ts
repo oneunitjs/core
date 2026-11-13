@@ -8,8 +8,8 @@ export {
 } from "./sanitize.js";
 export { createCompression, type CompressionMiddleware, type CompressionOptions } from "./compression.js";
 export { createHelmet, type HelmetMiddleware, type HelmetOptions } from "./helmet.js";
-export { createSecurityMiddlewareBase } from "./middleware-base.js";
-
+export { createRateLimit } from "./rate-limit.js";
+export type { RateLimitMiddleware, RateLimitOptions, RateLimitInfo } from "./types.js";
 export type {
     SecurityMiddleware,
     SecurityContext,
@@ -17,3 +17,4 @@ export type {
     SecurityProvider,
     SecurityOptions,
 } from "./types.js";
+export { createSecurityMiddlewareBase } from "./middleware-base.js";
