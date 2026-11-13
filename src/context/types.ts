@@ -49,4 +49,10 @@ export interface RequestContext {
      * Check if we're currently inside a request context.
      */
     isActive(): boolean;
+
+    /**
+     * Run a function within this context with initial values.
+     * Values are available via `get()` during execution.
+     */
+    run<R = unknown>(fn: () => R | Promise<R>, values?: Record<string, unknown>): Promise<R>;
 }

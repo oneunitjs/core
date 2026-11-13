@@ -10,16 +10,19 @@
  * import { createRequestContext } from "@oneunit/core";
  *
  * // Create a context instance
- * const requestContext = createRequestContext<{
- *   requestId: string;
- *   userId: string | undefined;
- * }>();
+ * const ctx = createRequestContext();
  *
  * // Use within an async request handler
- * await requestContext.run({ requestId: "req-123", userId: "user-456" }, async () => {
- *   const currentId = requestContext.get("requestId");
- *   console.log(`Request ID: ${currentId}`); // "Request ID: req-123"
+ * await ctx.run({ requestId: "req-123", userId: "user-456" }, async () => {
+ *   const id = ctx.get("requestId");
+ *   console.log(`Request ID: ${id}`); // "Request ID: req-123"
  * });
+ *
+ * // Disable context tracking
+ * ctx.disable();
+ * // Re-enable
+ * ctx.enable();
+ * ```
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -32,12 +35,13 @@ import type { RequestContext, RequestContextOptions } from "./types.js";
  * request-scoped values, plus a `run` method to execute code within
  * the context.
  *
- * @param options - Optional configuration (initialValues to pre-populate)
+ * @param options - Optional configuration
  * @returns A request context instance
  *
  * @example
  * ```ts
  * const ctx = createRequestContext();
+ *
  * await ctx.run({ requestId: "abc" }, async () => {
  *   console.log(ctx.get("requestId")); // "abc"
  * });
@@ -46,25 +50,19 @@ import type { RequestContext, RequestContextOptions } from "./types.js";
 export function createRequestContext(
     _options?: RequestContextOptions,
 ): RequestContext & {
-    run: <R = unknown>(fn: () => R | Promise<R>) => Promise<R>;
-    runWithValues: <R = unknown>(
-        values: Record<string, unknown>,
-        fn: () => R | Promise<R>,
-    ) => Promise<R>;
+    run: <R = unknown>(fn: () => R | Promise<R>, values?: Record<string, unknown>) => Promise<R>;
+    enable(): void;
+    disable(): void;
 } {
     const store = new AsyncLocalStorage<Map<string, unknown>>();
+    let enabled = true;
 
     function getContext(): Map<string, unknown> | undefined {
+        if (!enabled) return undefined;
         return store.getStore();
     }
 
-    const context: RequestContext & {
-        run: <R = unknown>(fn: () => R | Promise<R>) => Promise<R>;
-        runWithValues: <R = unknown>(
-            values: Record<string, unknown>,
-            fn: () => R | Promise<R>,
-        ) => Promise<R>;
-    } = {
+    return {
         get<T = unknown>(key: string): T | undefined {
             const ctx = getContext();
             return ctx?.get(key) as T | undefined;
@@ -97,17 +95,18 @@ export function createRequestContext(
         isActive(): boolean {
             return getContext() !== undefined;
         },
-        async run<R = unknown>(fn: () => R | Promise<R>): Promise<R> {
-            return store.run(new Map<string, unknown>(), fn);
-        },
-        async runWithValues<R = unknown>(
-            values: Record<string, unknown>,
+        async run<R = unknown>(
             fn: () => R | Promise<R>,
+            values?: Record<string, unknown>,
         ): Promise<R> {
-            const ctx = new Map<string, unknown>(Object.entries(values));
+            const ctx = new Map<string, unknown>(Object.entries(values ?? {}));
             return store.run(ctx, fn);
         },
+        enable() {
+            enabled = true;
+        },
+        disable() {
+            enabled = false;
+        },
     };
-
-    return context;
 }
