@@ -15,6 +15,9 @@ import { createFastifyCookieAdapter } from "./adapters/fastify.js";
 import { createKoaCookieAdapter } from "./adapters/koa.js";
 import { createHttpCookieAdapter } from "./adapters/http.js";
 
+const GCM_TAG_LENGTH = 16;
+const GCM_IV_LENGTH = 12;
+
 function deriveKey(secret: string, salt: string, keyLength: number = 32): Buffer {
     return scryptSync(secret, salt, keyLength);
 }
@@ -31,21 +34,27 @@ function verifySignedValue(value: string, signature: string, secret: string, alg
 
 function encryptValue(value: string, options: Required<ServerOnlyCookieOptions>): string {
     const salt = randomBytes(16).toString("hex");
-    const iv = randomBytes(options.ivLength);
+    const iv = randomBytes(options.ivLength ?? GCM_IV_LENGTH);
     const key = deriveKey(options.secret, salt, 32);
-    const cipher = createCipheriv("aes-256-cbc", key, iv);
+    const cipher = createCipheriv("aes-256-gcm", key, iv);
+    cipher.setAAD(Buffer.from(salt, "utf8"));
     let encrypted = cipher.update(value, "utf8", "hex");
     encrypted += cipher.final("hex");
-    return `${salt}:${iv.toString("hex")}:${encrypted}`;
+    const authTag = cipher.getAuthTag().toString("hex");
+    return `${salt}:${iv.toString("hex")}:${encrypted}:${authTag}`;
 }
 
 function decryptValue(encrypted: string, options: Required<ServerOnlyCookieOptions>): string | null {
     try {
-        const [salt, ivHex, ciphertext] = encrypted.split(":");
-        if (!salt || !ivHex || !ciphertext) return null;
+        const parts = encrypted.split(":");
+        if (parts.length !== 4) return null;
+        const [salt, ivHex, ciphertext, authTag] = parts;
+        if (!salt || !ivHex || !ciphertext || !authTag) return null;
         const iv = Buffer.from(ivHex, "hex");
         const key = deriveKey(options.secret, salt, 32);
-        const decipher = createDecipheriv("aes-256-cbc", key, iv);
+        const decipher = createDecipheriv("aes-256-gcm", key, iv);
+        decipher.setAAD(Buffer.from(salt, "utf8"));
+        decipher.setAuthTag(Buffer.from(authTag, "hex"));
         let decrypted = decipher.update(ciphertext, "hex", "utf8");
         decrypted += decipher.final("utf8");
         return decrypted;
@@ -72,11 +81,31 @@ function validateCookieName(name: string): void {
     }
 }
 
+function hasSecurePrefix(name: string): boolean {
+    return name.startsWith("__Secure-") || name.startsWith("__Host-");
+}
+
 function serializeCookie(name: string, value: string, options: CookieOptions): string {
     validateCookieName(name);
+
+    if (hasSecurePrefix(name)) {
+        if (options.secure !== true) {
+            throw new Error(`Cookie "${name}" with __Secure- or __Host- prefix requires Secure attribute`);
+        }
+        if (name.startsWith("__Host-")) {
+            if (options.path !== "/" && options.path !== undefined) {
+                throw new Error(`Cookie "${name}" with __Host- prefix must have Path=/`);
+            }
+            if (options.domain !== undefined) {
+                throw new Error(`Cookie "${name}" with __Host- prefix must not have Domain attribute`);
+            }
+        }
+    }
+
     if (options.sameSite === "none" && options.secure !== true) {
         throw new Error("SameSite=None requires Secure");
     }
+
     const encoded = encodeURIComponent(value);
     const parts: string[] = [`${name}=${encoded}`];
     if (options.path) parts.push(`Path=${options.path}`);
@@ -113,7 +142,7 @@ function createStore(config: CookieConfig, io: CookieIo, store: Map<string, Cook
 
             if (merged.encrypted) {
                 const s = requiredSecret(secret, name, "encrypted");
-                const opts: Required<ServerOnlyCookieOptions> = { secret: s, algorithm: "sha256", ivLength: 16 };
+                const opts: Required<ServerOnlyCookieOptions> = { secret: s, algorithm: "sha256", ivLength: GCM_IV_LENGTH };
                 const encrypted = encryptValue(value, opts);
                 store.set(name, { value: encrypted, signed: false, encrypted: true, secret: s });
                 io.write(name, encrypted, merged);
@@ -195,11 +224,11 @@ function createStore(config: CookieConfig, io: CookieIo, store: Map<string, Cook
                 secret = config_.secret;
             }
             if (!secret) return null;
-            const opts: Required<ServerOnlyCookieOptions> = { secret, algorithm: "sha256", ivLength: 16 };
+            const opts: Required<ServerOnlyCookieOptions> = { secret, algorithm: "sha256", ivLength: GCM_IV_LENGTH };
             let result = decryptValue(payload, opts);
             if (result !== null) return result;
             for (const fallback of config_.secrets ?? []) {
-                const fallbackOpts: Required<ServerOnlyCookieOptions> = { secret: fallback, algorithm: "sha256", ivLength: 16 };
+                const fallbackOpts: Required<ServerOnlyCookieOptions> = { secret: fallback, algorithm: "sha256", ivLength: GCM_IV_LENGTH };
                 result = decryptValue(payload, fallbackOpts);
                 if (result !== null) return result;
             }

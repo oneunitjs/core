@@ -14,6 +14,7 @@ const DEFAULT_HELMET_OPTIONS: HelmetOptions = {
 };
 
 export interface HelmetMiddleware {
+    name: string;
     enabled: boolean;
     options: HelmetOptions;
     enable(): void;
@@ -163,6 +164,7 @@ export function createHelmet(options: HelmetOptions = {}): HelmetMiddleware {
     }
 
     return {
+        name: "helmet",
         get enabled() { return enabled; },
         get options() { return { ...merged }; },
         enable() { enabled = true; },

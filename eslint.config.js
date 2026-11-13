@@ -1,6 +1,14 @@
+import tsParser from "@typescript-eslint/parser";
+
 export default [
     {
         files: ["src/**/*.ts", "test/**/*.ts"],
+        languageOptions: {
+            parser: tsParser,
+            parserOptions: {
+                sourceType: "module",
+            },
+        },
         rules: {
             "no-console": "warn",
             "no-unused-vars": ["error", { argsIgnorePattern: "^_" }],

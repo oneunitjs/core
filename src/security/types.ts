@@ -1,3 +1,5 @@
+import type { HealthServer } from "../health/types.js";
+
 export type SecurityOptions = {
     enabled?: boolean;
 };
@@ -86,19 +88,20 @@ export interface SecurityMiddleware {
     toggle(): void;
 }
 
-export interface CorsMiddleware extends HealthServer {
-    // Cors-specific properties
+export interface CorsMiddleware extends SecurityMiddleware {
+    middleware(): (req: unknown, res: unknown, next?: () => void) => void;
+    headers(): Record<string, string>;
 }
 
-export interface CsrfMiddleware extends HealthServer {
+export interface CsrfMiddleware extends SecurityMiddleware {
     // Csrf-specific properties
 }
 
-export interface HelmetMiddleware extends HealthServer {
+export interface HelmetMiddleware extends SecurityMiddleware {
     // Helmet-specific properties
 }
 
-export interface CompressionMiddleware extends HealthServer {
+export interface CompressionMiddleware extends SecurityMiddleware {
     // Compression-specific properties
 }
 

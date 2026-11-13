@@ -1,7 +1,15 @@
-import type { HealthServer } from "../types.js";
+import type { HealthProvider, HealthRegistry, HealthServer, HealthRouteOptions } from "../types.js";
+import { createHealthRegistry } from "../registry.js";
+import { createHealthRoute } from "../route.js";
 
-export function createExpressHealthAdapter(app: any): HealthServer {
-    return {
+export function createExpressHealthAdapter(
+    app: any,
+    options: HealthRouteOptions = {},
+): { registry: HealthRegistry; register(provider: HealthProvider): void } {
+    const registry: HealthRegistry = createHealthRegistry();
+    const route = createHealthRoute(registry, options);
+
+    const server: HealthServer = {
         get: (path, handler) => {
             app.get(path, async (_req: any, res: any) => {
                 const reply: any = {
@@ -20,10 +28,25 @@ export function createExpressHealthAdapter(app: any): HealthServer {
             (app as any)[name] = value;
         },
     };
+
+    route(server);
+
+    return {
+        registry,
+        register(provider: HealthProvider): void {
+            registry.register(provider);
+        },
+    };
 }
 
-export function createFastifyHealthAdapter(server: any): HealthServer {
-    return {
+export function createFastifyHealthAdapter(
+    server: any,
+    options: HealthRouteOptions = {},
+): { registry: HealthRegistry; register(provider: HealthProvider): void } {
+    const registry: HealthRegistry = createHealthRegistry();
+    const route = createHealthRoute(registry, options);
+
+    const healthServer: HealthServer = {
         get: (path, handler) => {
             server.get(path, async (_req: any, reply: any) => {
                 const healthReply: any = {
@@ -42,10 +65,25 @@ export function createFastifyHealthAdapter(server: any): HealthServer {
             server.decorate(name, value);
         },
     };
+
+    route(healthServer);
+
+    return {
+        registry,
+        register(provider: HealthProvider): void {
+            registry.register(provider);
+        },
+    };
 }
 
-export function createKoaHealthAdapter(app: any): HealthServer {
-    return {
+export function createKoaHealthAdapter(
+    app: any,
+    options: HealthRouteOptions = {},
+): { registry: HealthRegistry; register(provider: HealthProvider): void } {
+    const registry: HealthRegistry = createHealthRegistry();
+    const route = createHealthRoute(registry, options);
+
+    const healthServer: HealthServer = {
         get: (path, handler) => {
             app.use(async (ctx: any, next: any) => {
                 if (ctx.method !== "GET" || ctx.path !== path) {
@@ -68,6 +106,15 @@ export function createKoaHealthAdapter(app: any): HealthServer {
         },
         decorate: (name, value) => {
             (app as any)[name] = value;
+        },
+    };
+
+    route(healthServer);
+
+    return {
+        registry,
+        register(provider: HealthProvider): void {
+            registry.register(provider);
         },
     };
 }

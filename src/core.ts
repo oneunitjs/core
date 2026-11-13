@@ -72,6 +72,10 @@ import {
     createHooks,
 } from "./hooks/index.js";
 
+import type {
+    HookListener,
+} from "./hooks/type.js";
+
 import {
     createConfig,
 } from "./config/index.js";
@@ -80,6 +84,30 @@ import {
     createCookieStore,
     createDetectedCookieStore,
 } from "./cookie/index.js";
+import type {
+    CookieOptions,
+} from "./cookie/types.js";
+import type {
+    CorsOptions,
+    SecurityMiddleware,
+    CsrfOptions,
+    HelmetOptions,
+    CompressionOptions,
+    SanitizeOptions,
+} from "./security/types.js";
+import type {
+    SystemInfo,
+    SystemMetrics,
+    HealthChecks,
+    SystemThresholds,
+    SystemStatus,
+} from "./lib/index.js";
+import type {
+    CreateConfigOptions,
+} from "./config/type.js";
+import type {
+    CookieConfig,
+} from "./cookie/types.js";
 
 import {
     createCors,
@@ -253,7 +281,7 @@ export function createApp(options?: AppOptions): App {
             return healthRegistry.checkAll();
         },
         async route(server) {
-            await (route as unknown as (server: HealthServer) => Promise<void>)(server);
+            await (healthRoute as unknown as (server: HealthServer) => Promise<void>)(server);
         },
         registerSystem(options) {
             healthRegistry.register(createSystemHealthProvider(options));

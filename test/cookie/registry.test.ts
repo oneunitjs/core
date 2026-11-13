@@ -101,7 +101,7 @@ describe("createCookieStore", () => {
 describe("DEFAULT_COOKIE_CONFIG", () => {
     it("has sensible defaults", () => {
         expect(DEFAULT_COOKIE_CONFIG.path).toBe("/");
-        expect(DEFAULT_COOKIE_CONFIG.secure).toBe(false);
+        expect(DEFAULT_COOKIE_CONFIG.secure).toBeUndefined();
         expect(DEFAULT_COOKIE_CONFIG.httpOnly).toBe(true);
         expect(DEFAULT_COOKIE_CONFIG.sameSite).toBe("lax");
         expect(DEFAULT_COOKIE_CONFIG.maxAge).toBe(0);

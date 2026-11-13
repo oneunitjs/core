@@ -2,7 +2,7 @@ import type { CookieConfig, CookieOptions } from "./types.js";
 
 export const DEFAULT_COOKIE_CONFIG: CookieConfig = {
     path: "/",
-    secure: false,
+    secure: undefined,
     httpOnly: true,
     sameSite: "lax",
     maxAge: 0,
@@ -19,7 +19,7 @@ export function mergeCookieOptions(
         domain: overrides.domain ?? defaults.domain,
         expires: overrides.expires,
         maxAge: overrides.maxAge ?? defaults.maxAge,
-        secure: overrides.secure ?? defaults.secure ?? false,
+        secure: overrides.secure ?? defaults.secure ?? process.env.NODE_ENV === "production",
         httpOnly: overrides.httpOnly ?? defaults.httpOnly ?? true,
         sameSite: overrides.sameSite ?? defaults.sameSite ?? "lax",
         signed: overrides.signed ?? defaults.signed ?? false,

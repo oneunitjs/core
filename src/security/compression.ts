@@ -1,3 +1,4 @@
+import { createGzip, createDeflate, createBrotliCompress, constants } from "node:zlib";
 import type { CompressionOptions } from "./types.js";
 export type { CompressionOptions };
 
@@ -10,6 +11,7 @@ const DEFAULT_COMPRESSION_OPTIONS: CompressionOptions = {
 };
 
 export interface CompressionMiddleware {
+    name: string;
     enabled: boolean;
     options: CompressionOptions;
     enable(): void;
@@ -17,6 +19,24 @@ export interface CompressionMiddleware {
     toggle(): void;
     middleware(): (req: unknown, res: unknown, next?: () => void) => void;
     shouldCompress(req: unknown, res: unknown): boolean;
+}
+
+function selectEncoding(acceptEncoding: string): "gzip" | "deflate" | "br" | null {
+    const ae = acceptEncoding.toLowerCase();
+    if (ae.includes("br")) return "br";
+    if (ae.includes("gzip")) return "gzip";
+    if (ae.includes("deflate")) return "deflate";
+    return null;
+}
+
+function compressSync(data: Buffer, encoding: "gzip" | "deflate" | "br", level: number): Buffer {
+    if (encoding === "br") {
+        return require("node:zlib").brotliCompressSync(data, { params: { [constants.BROTLI_PARAM_QUALITY]: level } });
+    }
+    if (encoding === "gzip") {
+        return require("node:zlib").gzipSync(data, { level });
+    }
+    return require("node:zlib").deflateSync(data, { level });
 }
 
 export function createCompression(options: CompressionOptions = {}): CompressionMiddleware {
@@ -33,15 +53,12 @@ export function createCompression(options: CompressionOptions = {}): Compression
 
     function shouldCompress(req: unknown, res: unknown): boolean {
         if (!enabled) return false;
-
-        if (merged.filter) {
-            return merged.filter(req, res);
-        }
+        if (merged.filter) return merged.filter(req, res);
 
         const acceptEncoding = (req as any)?.headers?.["accept-encoding"];
         if (!acceptEncoding) return false;
 
-        return /(gzip|deflate|br)/.test(String(acceptEncoding));
+        return selectEncoding(String(acceptEncoding)) !== null;
     }
 
     function middleware(): (req: unknown, res: unknown, next?: () => void) => void {
@@ -56,13 +73,56 @@ export function createCompression(options: CompressionOptions = {}): Compression
                 return;
             }
 
-            if (typeof res === "object" && res !== null) {
-                if ("setHeader" in res) {
-                    (res as any).setHeader("Content-Encoding", "gzip");
-                }
-                if ("setHeader" in res) {
-                    (res as any).setHeader("Vary", "Accept-Encoding");
-                }
+            const encoding = selectEncoding(String((req as any)?.headers?.["accept-encoding"] ?? ""));
+            if (!encoding) {
+                if (next) next();
+                return;
+            }
+
+            if (typeof res !== "object" || res === null) {
+                if (next) next();
+                return;
+            }
+
+            const resAny = res as any;
+
+            const chunks: Buffer[] = [];
+            if (typeof resAny.write === "function" && typeof resAny.end === "function") {
+                const originalWrite = resAny.write.bind(resAny);
+                const originalEnd = resAny.end.bind(resAny);
+
+                resAny.write = (chunk: any, ...args: any[]): boolean => {
+                    if (chunk) {
+                        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+                    }
+                    return true;
+                };
+
+                resAny.end = (chunk?: any, ...args: any[]): void => {
+                    if (chunk) {
+                        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+                    }
+                    const body = Buffer.concat(chunks);
+
+                    if (body.length < (merged.threshold ?? 1024)) {
+                        originalEnd(body, ...args);
+                        return;
+                    }
+
+                    try {
+                        const compressed = compressSync(body, encoding, merged.level ?? 6);
+                        if (typeof resAny.setHeader === "function") {
+                            resAny.setHeader("Content-Encoding", encoding);
+                            resAny.setHeader("Vary", "Accept-Encoding");
+                            if (typeof resAny.removeHeader === "function") {
+                                resAny.removeHeader("Content-Length");
+                            }
+                        }
+                        originalEnd(compressed, ...args);
+                    } catch {
+                        originalEnd(body, ...args);
+                    }
+                };
             }
 
             if (next) next();
@@ -70,6 +130,7 @@ export function createCompression(options: CompressionOptions = {}): Compression
     }
 
     return {
+        name: "compression",
         get enabled() { return enabled; },
         get options() { return { ...merged }; },
         enable() { enabled = true; },

@@ -13,6 +13,7 @@ const DEFAULT_CORS_OPTIONS: CorsOptions = {
 };
 
 export interface CorsMiddleware {
+    name: string;
     enabled: boolean;
     options: CorsOptions;
     enable(): void;
@@ -20,6 +21,32 @@ export interface CorsMiddleware {
     toggle(): void;
     middleware(): (req: unknown, res: unknown, next?: () => void) => void;
     headers(): Record<string, string>;
+}
+
+type OriginValue = string | string[] | boolean;
+
+function isOriginAllowed(origin: string | undefined, allowed: OriginValue): boolean {
+    if (!origin) return false;
+    if (allowed === true) return true;
+    if (allowed === false) return false;
+    if (typeof allowed === "string") return allowed === origin || allowed === "*";
+    if (Array.isArray(allowed)) return allowed.includes(origin);
+    return false;
+}
+
+function resolveOrigin(origin: string | undefined, allowed: OriginValue): string | null {
+    if (allowed === true) return origin ?? null;
+    if (allowed === false) return null;
+    if (typeof allowed === "string") {
+        if (allowed === "*") return "*";
+        if (!origin) return allowed;
+        return allowed === origin ? allowed : null;
+    }
+    if (Array.isArray(allowed)) {
+        if (!origin) return null;
+        return allowed.includes(origin) ? origin : null;
+    }
+    return null;
 }
 
 export function createCors(options: CorsOptions = {}): CorsMiddleware {
@@ -36,18 +63,26 @@ export function createCors(options: CorsOptions = {}): CorsMiddleware {
 
     let enabled = true;
 
-    function headers(): Record<string, string> {
+    function headers(originHeader: string | undefined): Record<string, string> {
         const h: Record<string, string> = {};
-        if (merged.origin !== undefined) {
-            h["Access-Control-Allow-Origin"] = merged.origin === "*" ? "*" : String(merged.origin);
+
+        const resolvedOrigin = resolveOrigin(originHeader, merged.origin as OriginValue);
+        if (resolvedOrigin !== null) {
+            h["Access-Control-Allow-Origin"] = resolvedOrigin === "*" ? "*" : resolvedOrigin;
         }
+
+        // When credentials are true, origin cannot be "*" per spec; reflect the request origin instead
+        if (merged.credentials && merged.origin === "*" && originHeader) {
+            h["Access-Control-Allow-Origin"] = originHeader;
+        }
+
         if (merged.methods) {
             h["Access-Control-Allow-Methods"] = merged.methods.join(", ");
         }
         if (merged.allowedHeaders) {
             h["Access-Control-Allow-Headers"] = merged.allowedHeaders.join(", ");
         }
-        if (merged.exposedHeaders) {
+        if (merged.exposedHeaders && merged.exposedHeaders.length > 0) {
             h["Access-Control-Expose-Headers"] = merged.exposedHeaders.join(", ");
         }
         if (merged.credentials !== undefined) {
@@ -56,6 +91,7 @@ export function createCors(options: CorsOptions = {}): CorsMiddleware {
         if (merged.maxAge !== undefined && merged.preflightContinue !== true) {
             h["Access-Control-Max-Age"] = String(merged.maxAge);
         }
+
         return h;
     }
 
@@ -66,9 +102,9 @@ export function createCors(options: CorsOptions = {}): CorsMiddleware {
                 return;
             }
 
-            const h = headers();
+            const originHeader = req?.headers?.origin;
+            const h = headers(originHeader);
 
-            // Set CORS headers on response
             for (const [key, value] of Object.entries(h)) {
                 res.setHeader(key, value);
             }
@@ -77,6 +113,12 @@ export function createCors(options: CorsOptions = {}): CorsMiddleware {
             const isPreflight = method === "OPTIONS";
 
             if (isPreflight) {
+                const originAllowed = isOriginAllowed(originHeader, merged.origin as OriginValue);
+                if (!originAllowed && merged.origin !== "*") {
+                    res.statusCode = 403;
+                    res.end(JSON.stringify({ error: "CORS origin not allowed" }));
+                    return;
+                }
                 if (merged.preflightContinue && next) {
                     next();
                     return;
@@ -102,6 +144,6 @@ export function createCors(options: CorsOptions = {}): CorsMiddleware {
         disable() { enabled = false; },
         toggle() { enabled = !enabled; },
         middleware,
-        headers,
+        headers: () => headers(undefined),
     };
 }

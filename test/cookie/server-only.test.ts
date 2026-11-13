@@ -176,4 +176,128 @@ describe("server-only cookie options", () => {
         const val = store.getSigned("session");
         expect(val).toBe("data");
     });
+
+    describe("secure defaults", () => {
+        it("defaults secure to false in non-production", () => {
+            const originalEnv = process.env.NODE_ENV;
+            process.env.NODE_ENV = "test";
+            try {
+                // Need to re-import to pick up new default, but DEFAULT_COOKIE_CONFIG is evaluated at import time
+                // Instead test via serialize behavior
+                const store = createCookieStore({ secret: "test" });
+                const serialized = store.serialize("session", "val", {});
+                // In non-production, secure should not be added unless explicitly set
+                expect(serialized).not.toContain("Secure");
+            } finally {
+                process.env.NODE_ENV = originalEnv;
+            }
+        });
+
+        it("defaults secure to true in production", () => {
+            const originalEnv = process.env.NODE_ENV;
+            process.env.NODE_ENV = "production";
+            try {
+                const store = createCookieStore({ secret: "test" });
+                const serialized = store.serialize("session", "val", {});
+                expect(serialized).toContain("Secure");
+            } finally {
+                process.env.NODE_ENV = originalEnv;
+            }
+        });
+    });
+
+    describe("cookie prefix enforcement", () => {
+        it("__Secure- prefix requires Secure attribute", () => {
+            const store = createCookieStore({ secret: "test" });
+            expect(() => {
+                store.serialize("__Secure-session", "val", { secure: false });
+            }).toThrow(/requires Secure/);
+        });
+
+        it("__Secure- prefix works with Secure attribute", () => {
+            const store = createCookieStore({ secret: "test" });
+            const serialized = store.serialize("__Secure-session", "val", { secure: true });
+            expect(serialized).toContain("__Secure-session=");
+            expect(serialized).toContain("Secure");
+        });
+
+        it("__Host- prefix requires Secure, Path=/, and no Domain", () => {
+            const store = createCookieStore({ secret: "test" });
+
+            // Missing Secure
+            expect(() => {
+                store.serialize("__Host-session", "val", { secure: false, path: "/" });
+            }).toThrow(/requires Secure/);
+
+            // Wrong path
+            expect(() => {
+                store.serialize("__Host-session", "val", { secure: true, path: "/app" });
+            }).toThrow(/Path=\//);
+
+            // Has domain
+            expect(() => {
+                store.serialize("__Host-session", "val", { secure: true, path: "/", domain: "example.com" });
+            }).toThrow(/must not have Domain/);
+        });
+
+        it("__Host- prefix works with correct attributes", () => {
+            const store = createCookieStore({ secret: "test" });
+            const serialized = store.serialize("__Host-session", "val", {
+                secure: true,
+                path: "/",
+            });
+            expect(serialized).toContain("__Host-session=");
+            expect(serialized).toContain("Secure");
+            expect(serialized).toContain("Path=/");
+            expect(serialized).not.toContain("Domain");
+        });
+
+        it("SameSite=None requires Secure", () => {
+            const store = createCookieStore({ secret: "test" });
+            expect(() => {
+                store.serialize("session", "val", { sameSite: "none", secure: false });
+            }).toThrow(/SameSite=None requires Secure/);
+        });
+    });
+
+    describe("AES-256-GCM encrypted format", () => {
+        it("encrypted value contains auth tag (4 colon-separated parts)", () => {
+            const store = createCookieStore({ secret: "my-enc-secret", encrypted: true });
+            store.setEncrypted("session", "sensitive-data");
+
+            const entry = store["store"].get("session");
+            const parts = entry.value.split(":");
+            expect(parts).toHaveLength(4);
+            // parts: [salt, iv, ciphertext, authTag]
+            expect(parts[0].length).toBe(32); // 16 bytes salt as hex
+            expect(parts[1].length).toBe(24); // 12 bytes IV as hex
+            expect(parts[3].length).toBe(32); // 16 bytes auth tag as hex
+        });
+
+        it("tampering with ciphertext fails decryption", () => {
+            const store = createCookieStore({ secret: "my-enc-secret", encrypted: true });
+            store.setEncrypted("session", "sensitive-data");
+
+            const entry = store["store"].get("session");
+            const parts = entry.value.split(":");
+            parts[2] = "00000000000000000000000000000000"; // Tamper ciphertext
+            store["store"].set("session", { ...entry, value: parts.join(":") });
+
+            const val = store.getEncrypted("session");
+            expect(val).toBeNull();
+        });
+
+        it("tampering with auth tag fails decryption", () => {
+            const store = createCookieStore({ secret: "my-enc-secret", encrypted: true });
+            store.setEncrypted("session", "sensitive-data");
+
+            const entry = store["store"].get("session");
+            const parts = entry.value.split(":");
+            parts[3] = "00000000000000000000000000000000"; // Tamper auth tag
+            store["store"].set("session", { ...entry, value: parts.join(":") });
+
+            const val = store.getEncrypted("session");
+            expect(val).toBeNull();
+        });
+    });
 });

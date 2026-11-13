@@ -10,11 +10,18 @@ export {
     createHealthRoute,
 } from "./route.js";
 export {
+    createHealthProvider,
+    createDatabaseHealthProvider,
+    createRedisHealthProvider,
+    createKafkaHealthProvider,
+} from "./provider.js";
+export {
     createSystemHealthProvider,
     createDockerHealthProvider,
     createKubernetesHealthProvider,
 } from "./system-health.js";
 export { detectHealthEnvironment } from "./system-health.js";
+export { createHealth, registerHealth } from "./health-factory.js";
 export type {
     HealthProvider,
     HealthCheckResult,
