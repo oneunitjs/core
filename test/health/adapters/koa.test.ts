@@ -60,20 +60,18 @@ describe("koaHealth", () => {
         await new Promise<void>((resolve) => server2.listen(0, resolve));
         const port2 = (server2.address() as any).port;
 
-        const res = await new Promise<{ statusCode: number }>((resolve, reject) => {
+        const _res = await new Promise<{ statusCode: number }>((resolve, reject) => {
             const req = http.request(
                 { hostname: "127.0.0.1", port: port2, path: "/other", method: "GET" },
-                (res) => {
-                    let data = "";
-                    res.on("data", (chunk) => { data += chunk; });
-                    res.on("end", () => resolve({ statusCode: res.statusCode ?? 0 }));
+                (_res) => {
+                    let _data = "";
+                    _res.on("data", (chunk) => { _data += chunk; });
+                    _res.on("end", () => resolve({ statusCode: _res.statusCode ?? 0 }));
                 },
             );
             req.on("error", reject);
             req.end();
         });
-
-        await new Promise<void>((resolve) => server2.close(resolve));
         expect(nextCalled).toBe(true);
     });
 });

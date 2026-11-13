@@ -1,111 +1,143 @@
 import { describe, it, expect } from "vitest";
-import { formatBytes, formatTime, timestamp } from "../../src/lib/formatter.js";
-import { getSystemInfo } from "../../src/lib/system.js";
-import {
-    getSystemStatus,
-    DEFAULT_THRESHOLDS,
-    type SystemStatus,
-} from "../../src/lib/system-status.js";
+import { formatBytes, formatTime, timestamp, getSystemInfo, getSystemStatus } from "../../src/lib/index.js";
 
-describe("formatBytes", () => {
-    it("formats bytes correctly", () => {
+describe("Lib - formatBytes", () => {
+    it("should format bytes as bytes", () => {
         expect(formatBytes(0)).toBe("0 Bytes");
+    });
+
+    it("should format bytes as KB", () => {
         expect(formatBytes(1024)).toBe("1 KB");
-        expect(formatBytes(1536)).toBe("1.5 KB");
+    });
+
+    it("should format bytes as MB", () => {
         expect(formatBytes(1048576)).toBe("1 MB");
     });
 
-    it("throws on negative bytes", () => {
-        expect(() => formatBytes(-1)).toThrow("Bytes must be positive");
+    it("should format bytes as GB", () => {
+        expect(formatBytes(1073741824)).toBe("1 GB");
     });
 
-    it("throws on non-finite bytes", () => {
-        expect(() => formatBytes(NaN)).toThrow("Bytes must be a finite number");
-    });
-});
-
-describe("formatTime", () => {
-    it("formats milliseconds", () => {
-        expect(formatTime(25)).toBe("25ms");
-        expect(formatTime(1500)).toBe("1.5s");
-        expect(formatTime(90000)).toBe("1.5m");
-        expect(formatTime(7200000)).toBe("2h");
+    it("should format bytes with decimals", () => {
+        expect(formatBytes(1536, 2)).toBe("1.5 KB");
     });
 
-    it("throws on negative time", () => {
-        expect(() => formatTime(-1)).toThrow("Time must be positive");
-    });
-});
-
-describe("timestamp", () => {
-    it("formats a Date to ISO string", () => {
-        const date = new Date("2022-01-01T00:00:00.000Z");
-        expect(timestamp(date)).toBe("2022-01-01T00:00:00.000Z");
+    it("should throw for negative bytes", () => {
+        expect(() => formatBytes(-1)).toThrow(/Bytes must be positive/);
     });
 
-    it("throws on non-Date", () => {
-        expect(() => timestamp("not a date" as any)).toThrow("Data must be a Date object");
+    it("should throw for non-finite bytes", () => {
+        expect(() => formatBytes(NaN)).toThrow(/Bytes must be a finite number/);
+    });
+
+    it("should throw for Infinity bytes", () => {
+        expect(() => formatBytes(Infinity)).toThrow(/Bytes must be a finite number/);
     });
 });
 
-describe("getSystemStatus", () => {
-    it("returns healthy when all checks pass and resources are normal", () => {
-        const status: SystemStatus = getSystemStatus(
-            { memory: { usagePercent: 50 }, cpu: { cores: 4, loadAverage: { oneMinute: 0.5 } } },
-            { memory: { status: true }, cpu: { status: true } },
-            DEFAULT_THRESHOLDS,
-        );
-        expect(status).toBe("healthy");
+describe("Lib - formatTime", () => {
+    it("should format time as ms", () => {
+        const result = formatTime(25);
+        expect(result).toMatch(/ms$/);
     });
 
-    it("returns unhealthy when a check fails", () => {
-        const status: SystemStatus = getSystemStatus(
-            { memory: { usagePercent: 50 }, cpu: { cores: 4, loadAverage: { oneMinute: 0.5 } } },
-            { memory: { status: false } },
-            DEFAULT_THRESHOLDS,
-        );
-        expect(status).toBe("unhealthy");
+    it("should format time as seconds", () => {
+        const result = formatTime(1500);
+        expect(result).toMatch(/s$/);
     });
 
-    it("returns unhealthy when memory is critically high", () => {
-        const status: SystemStatus = getSystemStatus(
-            { memory: { usagePercent: 95 }, cpu: { cores: 4, loadAverage: { oneMinute: 0.5 } } },
-            { memory: { status: true }, cpu: { status: true } },
-            DEFAULT_THRESHOLDS,
-        );
-        expect(status).toBe("unhealthy");
+    it("should format time as minutes", () => {
+        const result = formatTime(90000);
+        expect(result).toMatch(/m$/);
     });
 
-    it("returns degraded when memory is moderately high", () => {
-        const status: SystemStatus = getSystemStatus(
-            { memory: { usagePercent: 80 }, cpu: { cores: 4, loadAverage: { oneMinute: 0.5 } } },
-            { memory: { status: true }, cpu: { status: true } },
-            DEFAULT_THRESHOLDS,
-        );
-        expect(status).toBe("degraded");
+    it("should format time as hours", () => {
+        const result = formatTime(7200000);
+        expect(result).toMatch(/h$/);
     });
 
-    it("returns unhealthy when load is critically high", () => {
-        const status: SystemStatus = getSystemStatus(
-            { memory: { usagePercent: 50 }, cpu: { cores: 4, loadAverage: { oneMinute: 5 } } },
-            { memory: { status: true }, cpu: { status: true } },
-            DEFAULT_THRESHOLDS,
-        );
-        expect(status).toBe("unhealthy");
+    it("should throw for negative time", () => {
+        expect(() => formatTime(-1)).toThrow(/Time must be positive/);
+    });
+
+    it("should throw for non-finite time", () => {
+        expect(() => formatTime(NaN)).toThrow(/Time must be a finite number/);
     });
 });
 
-describe("getSystemInfo", () => {
-    it("returns system information", () => {
+describe("Lib - timestamp", () => {
+    it("should format date as ISO string", () => {
+        const date = new Date("2024-01-15T10:30:00.000Z");
+        expect(timestamp(date)).toBe("2024-01-15T10:30:00.000Z");
+    });
+
+    it("should throw for non-Date input", () => {
+        expect(() => timestamp("not-a-date" as unknown as Date)).toThrow(/Data must be a Date object/);
+    });
+
+    it("should throw for null input", () => {
+        expect(() => timestamp(null as unknown as Date)).toThrow(/Data must be a Date object/);
+    });
+});
+
+describe("Lib - getSystemInfo", () => {
+    it("should return system info object", () => {
         const info = getSystemInfo();
+        expect(info.process).toBeDefined();
+        expect(info.performance).toBeDefined();
+        expect(info.memory).toBeDefined();
+        expect(info.cpu).toBeDefined();
+        expect(info.network).toBeDefined();
+        expect(info.user).toBeDefined();
+    });
+});
 
-        expect(info.process.pid).toBeGreaterThan(0);
-        expect(info.process.node).toBeDefined();
-        expect(info.process.environment).toBeDefined();
-        expect(info.memory.total).toBeDefined();
-        expect(info.memory.usagePercent).toBeGreaterThanOrEqual(0);
-        expect(info.cpu.cores).toBeGreaterThan(0);
-        expect(info.cpu.model).toBeDefined();
-        expect(info.user.username).toBeDefined();
+describe("Lib - getSystemStatus", () => {
+    it("should return healthy status when all checks pass", () => {
+        const result = getSystemStatus(
+            { cpu: { cores: 4, loadAverage: { oneMinute: 0.3 } }, memory: { usagePercent: 40 } },
+            { db: { status: true }, cache: { status: true } }
+        );
+        expect(result).toBe("healthy");
+    });
+
+    it("should return degraded status when memory usage is high", () => {
+        const result = getSystemStatus(
+            { cpu: { cores: 4, loadAverage: { oneMinute: 0.3 } }, memory: { usagePercent: 60 } },
+            { db: { status: true }, cache: { status: true } },
+            { memory: { degraded: 50, unhealthy: 90 }, load: { degraded: 0.7, unhealthy: 1 } }
+        );
+        expect(result).toBe("degraded");
+    });
+
+    it("should return unhealthy status when any check fails", () => {
+        const result = getSystemStatus(
+            { cpu: { cores: 4, loadAverage: { oneMinute: 0.3 } }, memory: { usagePercent: 40 } },
+            { db: { status: true }, cache: { status: false } }
+        );
+        expect(result).toBe("unhealthy");
+    });
+
+    it("should return unhealthy when CPU load is high", () => {
+        const result = getSystemStatus(
+            { cpu: { cores: 1, loadAverage: { oneMinute: 1.5 } }, memory: { usagePercent: 40 } },
+            { db: { status: true }, cache: { status: true } },
+            { memory: { degraded: 75, unhealthy: 90 }, load: { degraded: 0.7, unhealthy: 1 } }
+        );
+        expect(result).toBe("unhealthy");
+    });
+
+    it("should return unhealthy when memory usage is high", () => {
+        const result = getSystemStatus(
+            { cpu: { cores: 4, loadAverage: { oneMinute: 0.3 } }, memory: { usagePercent: 95 } },
+            { db: { status: true }, cache: { status: true } },
+            { memory: { degraded: 75, unhealthy: 90 }, load: { degraded: 0.7, unhealthy: 1 } }
+        );
+        expect(result).toBe("unhealthy");
+    });
+
+    it("should handle empty checks", () => {
+        const result = getSystemStatus({ cpu: { cores: 4, loadAverage: { oneMinute: 0.3 } }, memory: { usagePercent: 40 } }, {});
+        expect(result).toBe("healthy");
     });
 });

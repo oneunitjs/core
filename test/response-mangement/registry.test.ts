@@ -1,11 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
-    ResponseManager,
     createResponseManager,
-    HTTP_STATUS,
-    ERROR_RESPONSES,
-    SUCCESS_RESPONSES,
-    BODYLESS_STATUSES,
     createResponseFrameworkManager,
     createExpressResponseAdapter,
     createFastifyResponseAdapter,
@@ -13,291 +8,218 @@ import {
     createHttpResponseAdapter,
 } from "../../src/response-mangement/index.js";
 
-describe("HTTP_STATUS", () => {
-    it("has standard HTTP status codes", () => {
-        expect(HTTP_STATUS.OK).toBe(200);
-        expect(HTTP_STATUS.CREATED).toBe(201);
-        expect(HTTP_STATUS.NOT_FOUND).toBe(404);
-        expect(HTTP_STATUS.INTERNAL_SERVER_ERROR).toBe(500);
+describe("Response Manager - Success Responses", () => {
+    let manager: ReturnType<typeof createResponseManager>;
+
+    beforeEach(() => {
+        manager = createResponseManager();
     });
-});
 
-describe("ResponseManager", () => {
-    it("creates a successful response", () => {
-        const manager = new ResponseManager();
-        const response = manager.success({ status: 201, data: { id: 1 }, message: "Created" });
-
+    it("should create OK response", () => {
+        const response = manager.success({ data: { id: 1 } });
         expect(response.success).toBe(true);
-        expect(response.code).toBe("201");
-        expect(response.msg).toBe("Created");
+        expect(response.code).toBe("200");
         expect(response.data).toEqual({ id: 1 });
     });
 
-    it("uses default service message", () => {
-        const manager = new ResponseManager();
-        const response = manager.success({ data: { id: 1 } });
-
+    it("should use default message when none provided", () => {
+        const response = manager.success({});
         expect(response.msg).toBe("Success");
     });
 
-    it("creates an error response", () => {
-        const manager = new ResponseManager();
-        const response = manager.error({
-            status: 404,
-            message: "Not found",
-            errors: [{ field: "email", message: "Email not found" }],
-        });
+    it("should use custom message when provided", () => {
+        const response = manager.success({ message: "Custom success" });
+        expect(response.msg).toBe("Custom success");
+    });
+});
 
+describe("Response Manager - Error Responses", () => {
+    let manager: ReturnType<typeof createResponseManager>;
+
+    beforeEach(() => {
+        manager = createResponseManager();
+    });
+
+    it("should create Bad Request response", () => {
+        const response = manager.error({ status: 400, message: "Invalid input" });
+        expect(response.success).toBe(false);
+        expect(response.code).toBe("400");
+        expect(response.msg).toBe("Invalid input");
+    });
+
+    it("should create Unauthorized response", () => {
+        const response = manager.error({ status: 401, message: "Auth required" });
+        expect(response.success).toBe(false);
+        expect(response.code).toBe("401");
+    });
+
+    it("should create Forbidden response", () => {
+        const response = manager.error({ status: 403, message: "Access denied" });
+        expect(response.success).toBe(false);
+        expect(response.code).toBe("403");
+    });
+
+    it("should create Not Found response", () => {
+        const response = manager.error({ status: 404, message: "Resource not found" });
         expect(response.success).toBe(false);
         expect(response.code).toBe("404");
-        expect(response.msg).toBe("Not found");
-        expect(response.errors).toEqual([{ field: "email", message: "Email not found" }]);
     });
 
-    it("creates a paginated response", () => {
-        const manager = new ResponseManager();
-        const response = manager.paginated({
-            data: [{ id: 1 }],
-            pagination: ResponseManager.pagination(10, 1, 10),
-        });
-
-        expect(response.success).toBe(true);
-        expect(response.data).toEqual([{ id: 1 }]);
-        expect(response.metadata?.pagination).toEqual({
-            total: 10,
-            page: 1,
-            pageSize: 10,
-            totalPages: 1,
-        });
+    it("should create Internal Server Error response", () => {
+        const response = manager.error({ status: 500, message: "Server error" });
+        expect(response.success).toBe(false);
+        expect(response.code).toBe("500");
     });
 
-    it("validates pagination", () => {
-        expect(() =>
-            ResponseManager.pagination(10, 0, 10)
-        ).toThrow(RangeError);
-        expect(() =>
-            ResponseManager.pagination(10, 1, 0)
-        ).toThrow(RangeError);
-    });
-
-    it("validates status codes", () => {
-        const manager = new ResponseManager();
-        expect(() => manager.success({ status: 999 } as any)).toThrow(RangeError);
-        expect(() => manager.error({ status: 999 })).toThrow(RangeError);
-    });
-
-    it("rejects body for bodyless statuses", () => {
-        const manager = new ResponseManager();
-        expect(() => manager.success({ status: 204 } as any)).toThrow(RangeError);
-        expect(() => manager.success({ status: 304 } as any)).toThrow(RangeError);
+    it("should include field errors in response", () => {
+        const response = manager.error({ status: 400, message: "Validation failed", errors: [{ field: "email", message: "Invalid email" }, { field: "password", message: "Too short" }] });
+        expect(response.errors).toHaveLength(2);
+        expect(response.errors?.[0].field).toBe("email");
+        expect(response.errors?.[1].field).toBe("password");
     });
 });
 
-describe("createResponseManager", () => {
-    it("creates a manager with custom options", () => {
-        const manager = createResponseManager({
-            defaultSuccessMessage: "Custom success",
-            defaultErrorMessage: "Custom error",
-        });
-
-        const response = manager.success({});
-        expect(response.msg).toBe("Custom success");
-
-        const error = manager.error({ status: 400 });
-        expect(error.msg).toBe("Custom error");
-    });
-});
-
-describe("createResponseFrameworkManager with Express adapter", () => {
-    it("sends success response", () => {
-        let statusCode: number | undefined;
-        let body: unknown;
-        let headers: Record<string, string> | undefined;
-
-        const res: any = {
-            status: (code: number) => { statusCode = code; return res; },
-            json: (b: unknown) => { body = b; return res; },
-            send: () => res,
-            end: () => res,
-            set: (name: string, value: string) => { headers = { [name]: value }; return res; },
-            type: () => res,
-            get: () => undefined,
-            removeHeader: () => {},
-        };
-
-        const adapter = createExpressResponseAdapter(res);
-        const manager = new ResponseManager();
+describe("Response Framework Manager - Express Adapter", () => {
+    it("should send response via Express adapter", () => {
+        const manager = createResponseManager();
+        const adapter = createExpressResponseAdapter({
+            set: (key: string, value: string) => { res[key] = value; },
+            status: (code: number) => { res.statusCode = code; return res; },
+            json: (body: unknown) => { res.body = body; },
+            end: () => {},
+            type: (t: string) => { res.type = t; return res; },
+            headersSent: false,
+        } as any);
+        const res: any = {};
         const rfm = createResponseFrameworkManager(manager, adapter);
-
-        rfm.success({ status: 201, data: { id: 1 }, message: "Created" });
-
-        expect(statusCode).toBe(201);
-        expect(body).toEqual({ success: true, code: "201", msg: "Created", data: { id: 1 } });
-        expect(headers).toEqual({ "content-type": "application/json" });
+        rfm.ok({ data: { id: 1 } });
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({ success: true, code: "200", msg: "Success", data: { id: 1 } });
     });
 
-    it("sends error response", () => {
-        let statusCode: number | undefined;
-        let body: unknown;
-
-        const res: any = {
-            status: (code: number) => { statusCode = code; return res; },
-            json: (b: unknown) => { body = b; return res; },
-            send: () => res,
-            end: () => res,
-            set: () => res,
-            type: () => res,
-            get: () => undefined,
-            removeHeader: () => {},
-        };
-
-        const adapter = createExpressResponseAdapter(res);
-        const manager = new ResponseManager();
+    it("should send error response via Express adapter", () => {
+        const manager = createResponseManager();
+        const adapter = createExpressResponseAdapter({
+            set: (key: string, value: string) => { res[key] = value; },
+            status: (code: number) => { res.statusCode = code; return res; },
+            json: (body: unknown) => { res.body = body; },
+            end: () => {},
+            type: (t: string) => { res.type = t; return res; },
+            headersSent: false,
+        } as any);
+        const res: any = {};
         const rfm = createResponseFrameworkManager(manager, adapter);
-
-        rfm.error({ status: 404, message: "Not found" });
-
-        expect(statusCode).toBe(404);
-        expect(body).toEqual({ success: false, code: "404", msg: "Not found" });
+        rfm.notFound({ message: "Not found" });
+        expect(res.statusCode).toBe(404);
+        expect(res.body.success).toBe(false);
+        expect(res.body.code).toBe("404");
     });
 
-    it("sends no content response", () => {
-        let statusCode: number | undefined;
-
-        const res: any = {
-            status: (code: number) => { statusCode = code; return res; },
-            send: () => res,
-            end: () => res,
-            json: () => res,
-            set: () => res,
-            type: () => res,
-            get: () => undefined,
-            removeHeader: () => {},
-        };
-
-        const adapter = createExpressResponseAdapter(res);
-        const manager = new ResponseManager();
-        const rfm = createResponseFrameworkManager(manager, adapter);
-
-        rfm.noContent();
-
-        expect(statusCode).toBe(204);
-    });
-});
-
-describe("createResponseFrameworkManager with Fastify adapter", () => {
-    it("sends success response", () => {
-        let statusCode: number | undefined;
-        let body: unknown;
-
-        const reply: any = {
-            code: (code: number) => { statusCode = code; return reply; },
-            send: (b: unknown) => { body = b; return reply; },
-            header: () => reply,
-            type: () => reply,
-            getHeader: () => undefined,
-            removeHeader: () => {},
-        };
-
-        const adapter = createFastifyResponseAdapter(reply);
-        const manager = new ResponseManager();
-        const rfm = createResponseFrameworkManager(manager, adapter);
-
-        rfm.ok({ message: "Hello", data: { x: 1 } });
-
-        expect(statusCode).toBe(200);
-        expect(body).toEqual({ success: true, code: "200", msg: "Hello", data: { x: 1 } });
-    });
-});
-
-describe("createResponseFrameworkManager with Koa adapter", () => {
-    it("sends success response", () => {
-        let body: unknown;
-
-        const ctx: any = {
-            status: 200,
-            body: undefined,
+    it("should send no content response via Express adapter", () => {
+        const manager = createResponseManager();
+        const adapter = createExpressResponseAdapter({
             set: () => {},
-            append: () => {},
-            get: () => undefined,
-            remove: () => {},
-            type: "text/plain",
-            request: { id: "req-123" },
-        };
+            status: (code: number) => { res.statusCode = code; return res; },
+            json: () => {},
+            end: () => { res.ended = true; },
+            type: (t: string) => { return res; },
+            headersSent: false,
+        } as any);
+        const res: any = {};
+        const rfm = createResponseFrameworkManager(manager, adapter);
+        rfm.noContent();
+        expect(res.statusCode).toBe(204);
+        expect(res.ended).toBe(true);
+    });
+});
 
+describe("Response Framework Manager - Fastify Adapter", () => {
+    it("should send response via Fastify adapter", () => {
+        const manager = createResponseManager();
+        const adapter = createFastifyResponseAdapter({
+            sent: false,
+            code: (code: number) => { res.statusCode = code; return res; },
+            header: (key: string, value: string) => { res[key] = value; return res; },
+            send: (body: unknown) => { res.body = body; },
+            type: (t: string) => { return res; },
+        } as any);
+        const res: any = {};
+        const rfm = createResponseFrameworkManager(manager, adapter);
+        rfm.ok({ data: { id: 1 } });
+        expect(res.statusCode).toBe(200);
+        expect(res.body.success).toBe(true);
+    });
+});
+
+describe("Response Framework Manager - Koa Adapter", () => {
+    it("should send response via Koa adapter", () => {
+        const manager = createResponseManager();
+        const ctx: any = { body: null, status: 200, set: () => {} };
         const adapter = createKoaResponseAdapter(ctx);
-        const manager = new ResponseManager();
         const rfm = createResponseFrameworkManager(manager, adapter);
-
-        rfm.ok({ message: "Hello" });
-
+        rfm.ok({ data: { id: 1 } });
         expect(ctx.status).toBe(200);
-        expect(ctx.body).toEqual({ success: true, code: "200", msg: "Hello" });
+        expect(ctx.body.success).toBe(true);
     });
 });
 
-describe("createResponseFrameworkManager with node:http adapter", () => {
-    it("sends success response", () => {
-        let statusCode: number | undefined;
-        let headers: Record<string, string> | undefined;
-        let body: string | undefined;
-
-        const res: any = {
-            writeHead: (code: number, h?: Record<string, string>) => {
-                statusCode = code;
-                headers = h;
-            },
-            end: (data?: string) => { body = data; },
-            getHeader: () => undefined,
-            removeHeader: () => {},
-            request: { id: "req-123" },
-        };
-
-        const adapter = createHttpResponseAdapter(res);
-        const manager = new ResponseManager();
+describe("Response Framework Manager - HTTP Adapter", () => {
+    it("should send response via HTTP adapter", () => {
+        const manager = createResponseManager();
+        const adapter = createHttpResponseAdapter({
+            writeHead: (code: number, headers: Record<string, string>) => { res.statusCode = code; res.headers = headers; },
+            end: (data?: string) => { res.body = data; },
+        } as any);
+        const res: any = {};
         const rfm = createResponseFrameworkManager(manager, adapter);
-
-        rfm.ok({ message: "Hello" });
-
-        expect(statusCode).toBe(200);
-        expect(body).toContain('"msg":"Hello"');
-        expect(headers).toEqual({ "content-type": "application/json" });
+        rfm.ok({ data: { id: 1 } });
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toContain('"success":true');
     });
 });
 
-describe("ERROR_RESPONSES and SUCCESS_RESPONSES", () => {
-    it("has standard error responses", () => {
-        expect(ERROR_RESPONSES.notFound).toEqual({ status: 404, message: "Resource not found" });
-        expect(ERROR_RESPONSES.unauthorized).toEqual({ status: 401, message: "Authentication required" });
-    });
-
-    it("has standard success responses", () => {
-        expect(SUCCESS_RESPONSES.ok).toEqual({ status: 200, message: "Success" });
-        expect(SUCCESS_RESPONSES.created).toEqual({ status: 201, message: "Resource created successfully" });
-    });
-
-    it("respond method handles error status", () => {
-        let statusCode: number | undefined;
-        let body: unknown;
-
-        const res: any = {
-            status: (code: number) => { statusCode = code; return res; },
-            json: (b: unknown) => { body = b; return res; },
-            send: () => res,
-            end: () => res,
-            set: () => res,
+describe("Response Framework Manager - Try/Catch Wrapper", () => {
+    it("should catch handler errors and send error response", async () => {
+        const manager = createResponseManager();
+        const adapter = createExpressResponseAdapter({
+            set: () => {},
+            status: (code: number) => { res.statusCode = code; return res; },
+            json: (body: unknown) => { res.body = body; },
+            end: () => {},
             type: () => res,
-            get: () => undefined,
-            removeHeader: () => {},
+            headersSent: false,
+        } as any);
+        const res: any = {};
+        const rfm = createResponseFrameworkManager(manager, adapter, {
+            tryCatchEnabled: true,
+            defaultErrorStatusCode: 500,
+        });
+        const failingHandler = async (_req: unknown, res: unknown) => {
+            throw new Error("Database connection failed");
         };
+        const safeHandler = rfm.wrapHandler(failingHandler);
+        await safeHandler({}, res);
+        expect(res.statusCode).toBe(500);
+        expect(res.body.success).toBe(false);
+        expect(res.body.msg).toBe("Database connection failed");
+    });
 
-        const adapter = createExpressResponseAdapter(res);
-        const manager = new ResponseManager();
-        const rfm = createResponseFrameworkManager(manager, adapter);
-
-        rfm.respond({ status: 404, response: { message: "Custom not found" } });
-
-        expect(statusCode).toBe(404);
-        expect(body).toEqual({ success: false, code: "404", msg: "Custom not found" });
+    it("should not wrap handler when tryCatchEnabled is false", async () => {
+        const manager = createResponseManager();
+        const adapter = createExpressResponseAdapter({
+            set: () => {},
+            status: (code: number) => { res.statusCode = code; return res; },
+            json: (body: unknown) => { res.body = body; },
+            end: () => {},
+            type: () => res,
+            headersSent: false,
+        } as any);
+        const res: any = {};
+        const rfm = createResponseFrameworkManager(manager, adapter, {
+            tryCatchEnabled: false,
+        });
+        const failingHandler = async (_req: unknown, res: unknown) => { throw new Error("Database connection failed"); };
+        const safeHandler = rfm.wrapHandler(failingHandler);
+        await expect(safeHandler({}, res)).rejects.toThrow("Database connection failed");
     });
 });

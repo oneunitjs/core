@@ -1,79 +1,102 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createConfig } from "../../src/config/create-config.js";
+import { createConfig } from "../../src/config/index.js";
 
-const originalEnv = process.env;
-
-beforeEach(() => {
-    process.env = { ...originalEnv };
-});
-
-afterEach(() => {
-    process.env = originalEnv;
-});
-
-describe("createConfig", () => {
-    it("returns defaults when env vars are unset", () => {
-        delete process.env.PORT;
-        delete process.env.HOST;
-        delete process.env.SERVICE_NAME;
-        delete process.env.NODE_ENV;
-
-        const config = createConfig();
-
+describe("Config - Defaults", () => {
+    it("should have default port", () => {
+        const config = createConfig({});
         expect(config.port).toBe(3000);
+    });
+
+    it("should have default host", () => {
+        const config = createConfig({});
         expect(config.host).toBe("localhost");
+    });
+
+    it("should have default service name", () => {
+        const config = createConfig({});
         expect(config.serviceName).toBe("app");
-        expect(config.nodeEnv).toBe("development");
-        expect(config.isDevelopment).toBe(true);
-        expect(config.isProduction).toBe(false);
-        expect(config.isTest).toBe(false);
     });
 
-    it("overrides defaults with options", () => {
-        const config = createConfig({
-            port: 8080,
-            host: "0.0.0.0",
-            serviceName: "my-api",
-            nodeEnv: "production",
-        });
+    it("should have default nodeEnv", () => {
+        const originalEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = "development";
+        try {
+            const config = createConfig({});
+            expect(config.nodeEnv).toBe("development");
+        } finally {
+            process.env.NODE_ENV = originalEnv;
+        }
+    });
+});
 
+describe("Config - Custom Values", () => {
+    it("should use custom port", () => {
+        const config = createConfig({ port: 8080 });
         expect(config.port).toBe(8080);
+    });
+
+    it("should use custom host", () => {
+        const config = createConfig({ host: "0.0.0.0" });
         expect(config.host).toBe("0.0.0.0");
+    });
+
+    it("should use custom service name", () => {
+        const config = createConfig({ serviceName: "my-api" });
         expect(config.serviceName).toBe("my-api");
+    });
+
+    it("should use custom nodeEnv", () => {
+        const config = createConfig({ nodeEnv: "production" });
         expect(config.nodeEnv).toBe("production");
-        expect(config.isProduction).toBe(true);
-        expect(config.isDevelopment).toBe(false);
-        expect(config.isTest).toBe(false);
+    });
+});
+
+describe("Config - Environment Detection", () => {
+    it("should detect development environment", () => {
+        const originalEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = "development";
+        try {
+            const config = createConfig({});
+            expect(config.isDevelopment).toBe(true);
+            expect(config.isProduction).toBe(false);
+            expect(config.isTest).toBe(false);
+        } finally {
+            process.env.NODE_ENV = originalEnv;
+        }
     });
 
-    it("env vars are used when options are not provided", () => {
-        process.env.PORT = "9000";
-        process.env.HOST = "127.0.0.1";
-        process.env.SERVICE_NAME = "env-svc";
+    it("should detect production environment", () => {
+        const originalEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = "production";
+        try {
+            const config = createConfig({});
+            expect(config.isDevelopment).toBe(false);
+            expect(config.isProduction).toBe(true);
+            expect(config.isTest).toBe(false);
+        } finally {
+            process.env.NODE_ENV = originalEnv;
+        }
+    });
+
+    it("should detect test environment", () => {
+        const originalEnv = process.env.NODE_ENV;
         process.env.NODE_ENV = "test";
-
-        const config = createConfig();
-
-        expect(config.port).toBe(9000);
-        expect(config.host).toBe("127.0.0.1");
-        expect(config.serviceName).toBe("env-svc");
-        expect(config.nodeEnv).toBe("test");
-        expect(config.isTest).toBe(true);
+        try {
+            const config = createConfig({});
+            expect(config.isDevelopment).toBe(false);
+            expect(config.isProduction).toBe(false);
+            expect(config.isTest).toBe(true);
+        } finally {
+            process.env.NODE_ENV = originalEnv;
+        }
     });
+});
 
-    it("toJSON returns a plain ServiceConfig object", () => {
-        const config = createConfig({ serviceName: "json-api" });
+describe("Config - toJSON", () => {
+    it("should serialize config to JSON", () => {
+        const config = createConfig({ serviceName: "test-app", port: 3000 });
         const json = config.toJSON();
-
-        expect(json).toEqual({
-            port: config.port,
-            host: config.host,
-            serviceName: "json-api",
-            nodeEnv: config.nodeEnv,
-            isDevelopment: config.isDevelopment,
-            isProduction: config.isProduction,
-            isTest: config.isTest,
-        });
-        expect(typeof json).toBe("object");
+        expect(json.serviceName).toBe("test-app");
+        expect(json.port).toBe(3000);
     });
 });

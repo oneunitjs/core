@@ -3,7 +3,6 @@ import { createApp } from "../../src/core/index.js";
 import {
     createResponseFrameworkManager,
     createResponseManager,
-    createExpressResponseAdapter,
     createFastifyResponseAdapter,
     createKoaResponseAdapter,
     createHttpResponseAdapter,

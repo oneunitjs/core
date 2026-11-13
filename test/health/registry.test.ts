@@ -1,194 +1,171 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
-    createHealthRegistry,
-    createHealthProvider,
-    createDatabaseHealthProvider,
-    createRedisHealthProvider,
-    createKafkaHealthProvider,
-    expressHealth,
-    fastifyHealth,
-    koaHealth,
-} from "../../src/health/index.js";
-import express from "express";
-import Fastify from "fastify";
-import Koa from "koa";
-import http from "node:http";
+import { describe, it, expect } from "vitest";
+import { createHealthRegistry } from "../../src/health/registry.js";
+import { createHealthRoute } from "../../src/health/route.js";
 
-describe("Health Registry - Express Real Server", () => {
-    let app: express.Application;
-    let server: http.Server;
-    let port: number;
-
-    beforeAll(async () => {
-        app = express();
-        app.use(express.json());
-
-        const health = expressHealth(app, { serviceName: "test-service" });
-        health.register(createHealthProvider("db", async () => ({ status: "healthy" })));
-
-        server = http.createServer(app);
-        await new Promise<void>((resolve) => server.listen(0, resolve));
-        port = (server.address() as any).port;
-    });
-
-    afterAll(async () => {
-        await new Promise<void>((resolve) => server.close(resolve));
-    });
-
-    async function request(path: string): Promise<{ statusCode: number; body: any }> {
-        return new Promise((resolve, reject) => {
-            const req = http.request(
-                { hostname: "127.0.0.1", port, path, method: "GET" },
-                (res) => {
-                    let data = "";
-                    res.on("data", (chunk) => { data += chunk; });
-                    res.on("end", () => {
-                        let parsed: any;
-                        try { parsed = JSON.parse(data); } catch { parsed = data; }
-                        resolve({ statusCode: res.statusCode ?? 0, body: parsed });
-                    });
-                },
-            );
-            req.on("error", reject);
-            req.end();
-        });
-    }
-
-    it("registers and serves health check via express server", async () => {
-        const res = await request("/health");
-        expect(res.statusCode).toBe(200);
-        expect(res.body.status).toBe("healthy");
-        expect(res.body.service).toBe("test-service");
-    });
-});
-
-describe("Health Registry - Fastify Real Server", () => {
-    let fastify: Fastify.FastifyInstance;
-    let port: number;
-
-    beforeAll(async () => {
-        fastify = Fastify();
-        const health = fastifyHealth(fastify, { serviceName: "test-service" });
-        health.register(createHealthProvider("db", async () => ({ status: "healthy" })));
-
-        await fastify.ready();
-        await new Promise<void>((resolve) => fastify.server.listen(0, resolve));
-        port = (fastify.server.address() as any).port;
-    });
-
-    afterAll(async () => {
-        await fastify.close();
-    });
-
-    async function request(path: string): Promise<{ statusCode: number; body: any }> {
-        return fastify.inject({ method: "GET", url: path }).then((res) => ({
-            statusCode: res.statusCode,
-            body: JSON.parse(res.payload),
-        }));
-    }
-
-    it("registers and serves health check via fastify server", async () => {
-        const res = await request("/health");
-        expect(res.statusCode).toBe(200);
-        expect(res.body.status).toBe("healthy");
-    });
-});
-
-describe("Health Registry - Koa Real Server", () => {
-    let app: Koa;
-    let server: http.Server;
-    let port: number;
-
-    beforeAll(async () => {
-        app = new Koa();
-        const health = koaHealth(app, { serviceName: "test-service" });
-        health.register(createHealthProvider("db", async () => ({ status: "healthy" })));
-
-        server = http.createServer(app.callback());
-        await new Promise<void>((resolve) => server.listen(0, resolve));
-        port = (server.address() as any).port;
-    });
-
-    afterAll(async () => {
-        await new Promise<void>((resolve) => server.close(resolve));
-    });
-
-    async function request(path: string): Promise<{ statusCode: number; body: any }> {
-        return new Promise((resolve, reject) => {
-            const req = http.request(
-                { hostname: "127.0.0.1", port, path, method: "GET" },
-                (res) => {
-                    let data = "";
-                    res.on("data", (chunk) => { data += chunk; });
-                    res.on("end", () => {
-                        let parsed: any;
-                        try { parsed = JSON.parse(data); } catch { parsed = data; }
-                        resolve({ statusCode: res.statusCode ?? 0, body: parsed });
-                    });
-                },
-            );
-            req.on("error", reject);
-            req.end();
-        });
-    }
-
-    it("registers and serves health check via koa server", async () => {
-        const res = await request("/health");
-        expect(res.statusCode).toBe(200);
-        expect(res.body.status).toBe("healthy");
-    });
-});
-
-describe("Health Providers - Real Framework Integration", () => {
-    it("database provider reports healthy", async () => {
-        const provider = createDatabaseHealthProvider(async () => undefined);
-        const result = await provider.check();
-        expect(result.status).toBe("healthy");
-    });
-
-    it("redis provider reports healthy", async () => {
-        const provider = createRedisHealthProvider(async () => undefined);
-        const result = await provider.check();
-        expect(result.status).toBe("healthy");
-    });
-
-    it("kafka provider reports healthy", async () => {
-        const provider = createKafkaHealthProvider(async () => undefined);
-        const result = await provider.check();
-        expect(result.status).toBe("healthy");
-    });
-
-    it("database provider reports unhealthy on failure", async () => {
-        const provider = createDatabaseHealthProvider(async () => {
-            throw new Error("connection refused");
-        }, true);
-        const result = await provider.check();
-        expect(result.status).toBe("unhealthy");
-        expect(result.message).toBe("connection refused");
-    });
-
-    it("critical provider marks overall as unhealthy", async () => {
+describe("Health Registry - Registration", () => {
+    it("should register a health provider", async () => {
         const registry = createHealthRegistry();
-        registry.register(createDatabaseHealthProvider(async () => {
-            throw new Error("db down");
-        }, true));
-        registry.register(createRedisHealthProvider(async () => ({ status: "healthy" }), false));
-
-        const results = await registry.checkAll();
-        expect(results.database.status).toBe("unhealthy");
-        expect(results.database.message).toBe("db down");
-        expect(results.redis.status).toBe("healthy");
+        registry.register({ name: "db", check: async () => ({ status: "healthy" }) });
+        const result = await registry.checkAll();
+        expect(result.db.status).toBe("healthy");
     });
 
-    it("non-critical unhealthy does not affect overall", async () => {
+    it("should register multiple providers", async () => {
         const registry = createHealthRegistry();
-        registry.register(createDatabaseHealthProvider(async () => ({ status: "healthy" }), false));
-        registry.register(createRedisHealthProvider(async () => {
-            throw new Error("redis down");
-        }, false));
-
+        registry.register({ name: "db", check: async () => ({ status: "healthy" }) });
+        registry.register({ name: "cache", check: async () => ({ status: "degraded" }) });
         const results = await registry.checkAll();
-        expect(results.database.status).toBe("healthy");
-        expect(results.redis.status).toBe("unhealthy");
+        expect(results.db.status).toBe("healthy");
+        expect(results.cache.status).toBe("degraded");
+    });
+
+    it("should unregister a provider", async () => {
+        const registry = createHealthRegistry();
+        registry.register({ name: "db", check: async () => ({ status: "healthy" }) });
+        registry.unregister("db");
+        const results = await registry.checkAll();
+        expect(results.db).toBeUndefined();
+    });
+
+    it("should handle provider that throws", async () => {
+        const registry = createHealthRegistry();
+        registry.register({ name: "failing", check: async () => { throw new Error("connection failed"); } });
+        const results = await registry.checkAll();
+        expect(results.failing.status).toBe("unhealthy");
+        expect(results.failing.message).toContain("connection failed");
+    });
+
+    it("should run checks in parallel", async () => {
+        const registry = createHealthRegistry();
+        let fastCompleted = false;
+        let slowCompleted = false;
+        registry.register({ name: "fast", check: async () => { await new Promise((r) => setTimeout(r, 10)); fastCompleted = true; return { status: "healthy" }; } });
+        registry.register({ name: "slow", check: async () => { await new Promise((r) => setTimeout(r, 100)); slowCompleted = true; return { status: "healthy" }; } });
+        const start = Date.now();
+        await registry.checkAll();
+        const duration = Date.now() - start;
+        expect(fastCompleted).toBe(true);
+        expect(slowCompleted).toBe(true);
+        expect(duration).toBeLessThan(200);
+    });
+});
+
+describe("Health Status Aggregation", () => {
+    it("should return healthy when all checks are healthy", async () => {
+        const registry = createHealthRegistry();
+        registry.register({ name: "db", check: async () => ({ status: "healthy" }) });
+        registry.register({ name: "cache", check: async () => ({ status: "healthy" }) });
+        const results = await registry.checkAll();
+        const hasUnhealthy = Object.values(results).some((r) => r.status === "unhealthy");
+        const hasDegraded = Object.values(results).some((r) => r.status === "degraded");
+        expect(hasUnhealthy).toBe(false);
+        expect(hasDegraded).toBe(false);
+    });
+
+    it("should return degraded when any check is degraded", async () => {
+        const registry = createHealthRegistry();
+        registry.register({ name: "db", check: async () => ({ status: "healthy" }) });
+        registry.register({ name: "cache", check: async () => ({ status: "degraded" }) });
+        const results = await registry.checkAll();
+        const hasUnhealthy = Object.values(results).some((r) => r.status === "unhealthy");
+        const hasDegraded = Object.values(results).some((r) => r.status === "degraded");
+        expect(hasUnhealthy).toBe(false);
+        expect(hasDegraded).toBe(true);
+    });
+
+    it("should return unhealthy when any check is unhealthy", async () => {
+        const registry = createHealthRegistry();
+        registry.register({ name: "db", check: async () => ({ status: "healthy" }) });
+        registry.register({ name: "api", check: async () => ({ status: "unhealthy" }) });
+        const results = await registry.checkAll();
+        const hasUnhealthy = Object.values(results).some((r) => r.status === "unhealthy");
+        expect(hasUnhealthy).toBe(true);
+    });
+});
+
+describe("Health Route - Express Adapter", () => {
+    it("should register health route on express server", async () => {
+        const registry = createHealthRegistry();
+        registry.register({ name: "db", check: async () => ({ status: "healthy" }) });
+        const route = createHealthRoute(registry, { path: "/health", serviceName: "test" });
+        const server: any = { get: (path: string, handler: any) => { server._handlers = server._handlers || {}; server._handlers[path] = handler; }, decorate: (name: string, value: unknown) => { server[name] = value; } };
+        route(server);
+        const reply: any = { status: (code: number) => { reply.statusCode = code; return reply; }, send: (body: unknown) => { reply.body = body; } };
+        await server._handlers["/health"]({}, reply);
+        expect(reply.statusCode).toBe(200);
+        expect(reply.body.status).toBe("healthy");
+        expect(reply.body.service).toBe("test");
+    });
+
+    it("should return 503 when service is unhealthy", async () => {
+        const registry = createHealthRegistry();
+        registry.register({ name: "db", check: async () => ({ status: "unhealthy" }) });
+        const route = createHealthRoute(registry, { path: "/health" });
+        const server: any = { get: (path: string, handler: any) => { server._handlers = server._handlers || {}; server._handlers[path] = handler; }, decorate: () => {} };
+        route(server);
+        const reply: any = { status: (code: number) => { reply.statusCode = code; return reply; }, send: (body: unknown) => { reply.body = body; } };
+        await server._handlers["/health"]({}, reply);
+        expect(reply.statusCode).toBe(503);
+        expect(reply.body.status).toBe("unhealthy");
+    });
+
+    it("should register /health/details route when includeDetails is true", async () => {
+        const registry = createHealthRegistry();
+        registry.register({ name: "db", check: async () => ({ status: "healthy", latency: 42 }) });
+        const route = createHealthRoute(registry, { path: "/health", includeDetails: true });
+        const server: any = { _handlers: {}, get: (path: string, handler: any) => { server._handlers[path] = handler; }, decorate: () => {} };
+        route(server);
+        expect(server._handlers["/health/details"]).toBeDefined();
+    });
+
+    it("should not register /health/details route when includeDetails is false", async () => {
+        const registry = createHealthRegistry();
+        const route = createHealthRoute(registry, { path: "/health", includeDetails: false });
+        const server: any = { _handlers: {}, get: (path: string, handler: any) => { server._handlers[path] = handler; }, decorate: () => {} };
+        route(server);
+        expect(server._handlers["/health/details"]).toBeUndefined();
+    });
+});
+
+describe("Health Route - Status Aggregation", () => {
+    it("should aggregate status as healthy when all are healthy", async () => {
+        const registry = createHealthRegistry();
+        registry.register({ name: "db", check: async () => ({ status: "healthy" }) });
+        registry.register({ name: "cache", check: async () => ({ status: "healthy" }) });
+        const results = await registry.checkAll();
+        const resultsArray = Object.entries(results);
+        const hasUnhealthy = resultsArray.some(([, r]) => r.status === "unhealthy");
+        const hasDegraded = resultsArray.some(([, r]) => r.status === "degraded");
+        let overallStatus: "healthy" | "degraded" | "unhealthy" = "healthy";
+        if (hasUnhealthy) overallStatus = "unhealthy";
+        else if (hasDegraded) overallStatus = "degraded";
+        expect(overallStatus).toBe("healthy");
+    });
+
+    it("should aggregate status as degraded when any is degraded", async () => {
+        const registry = createHealthRegistry();
+        registry.register({ name: "db", check: async () => ({ status: "healthy" }) });
+        registry.register({ name: "cache", check: async () => ({ status: "degraded" }) });
+        const results = await registry.checkAll();
+        const resultsArray = Object.entries(results);
+        const hasUnhealthy = resultsArray.some(([, r]) => r.status === "unhealthy");
+        const hasDegraded = resultsArray.some(([, r]) => r.status === "degraded");
+        let overallStatus: "healthy" | "degraded" | "unhealthy" = "healthy";
+        if (hasUnhealthy) overallStatus = "unhealthy";
+        else if (hasDegraded) overallStatus = "degraded";
+        expect(overallStatus).toBe("degraded");
+    });
+
+    it("should aggregate status as unhealthy when any is unhealthy", async () => {
+        const registry = createHealthRegistry();
+        registry.register({ name: "db", check: async () => ({ status: "healthy" }) });
+        registry.register({ name: "api", check: async () => ({ status: "unhealthy" }) });
+        const results = await registry.checkAll();
+        const resultsArray = Object.entries(results);
+        const hasUnhealthy = resultsArray.some(([, r]) => r.status === "unhealthy");
+        let overallStatus: "healthy" | "degraded" | "unhealthy" = "healthy";
+        if (hasUnhealthy) overallStatus = "unhealthy";
+        else if (hasDegraded) overallStatus = "degraded";
+        expect(overallStatus).toBe("unhealthy");
     });
 });

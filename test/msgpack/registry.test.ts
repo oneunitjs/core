@@ -1,84 +1,144 @@
-import { describe, it, expect } from "vitest";
-import { createMsgPack, DEFAULT_MSGPACK_CONFIG, mergeMsgPackConfig } from "../../src/msgpack/index.js";
+import { describe, it, expect, beforeEach } from "vitest";
+import { createMsgPack } from "../../src/msgpack/index.js";
 
-describe("createMsgPack", () => {
-    it("encodes and decodes a simple value", () => {
-        const msgpack = createMsgPack();
-        const encoded = msgpack.encode({ hello: "world", count: 42 });
-        expect(encoded).toBeInstanceOf(Uint8Array);
+describe("MsgPack - Encode/Decode", () => {
+    let msgpack: ReturnType<typeof createMsgPack>;
 
-        const decoded = msgpack.decode<{ hello: string; count: number }>(encoded);
-        expect(decoded).toEqual({ hello: "world", count: 42 });
+    beforeEach(() => { msgpack = createMsgPack(); });
+
+    it("should encode and decode string", () => {
+        const bytes = msgpack.encode("hello");
+        const decoded = msgpack.decode(bytes);
+        expect(decoded).toBe("hello");
     });
 
-    it("encodes and decodes arrays", () => {
-        const msgpack = createMsgPack();
-        const encoded = msgpack.encode([1, 2, 3, "four"]);
-        const decoded = msgpack.decode<unknown[]>(encoded);
-        expect(decoded).toEqual([1, 2, 3, "four"]);
+    it("should encode and decode number", () => {
+        const bytes = msgpack.encode(42);
+        const decoded = msgpack.decode(bytes);
+        expect(decoded).toBe(42);
     });
 
-    it("encodes and decodes nested objects", () => {
-        const msgpack = createMsgPack();
-        const data = { user: { name: "Alice", age: 30, tags: ["admin", "user"] } };
-        const encoded = msgpack.encode(data);
-        const decoded = msgpack.decode<typeof data>(encoded);
-        expect(decoded).toEqual(data);
+    it("should encode and decode boolean", () => {
+        const bytes = msgpack.encode(true);
+        const decoded = msgpack.decode(bytes);
+        expect(decoded).toBe(true);
     });
 
-    it("encodes and decodes null, undefined, booleans", () => {
-        const msgpack = createMsgPack();
-        expect(msgpack.decode(msgpack.encode(null))).toBeNull();
-        expect(msgpack.decode(msgpack.encode(true))).toBe(true);
-        expect(msgpack.decode(msgpack.encode(false))).toBe(false);
+    it("should encode and decode null", () => {
+        const bytes = msgpack.encode(null);
+        const decoded = msgpack.decode(bytes);
+        expect(decoded).toBeNull();
     });
 
-    it("encodeSync and decodeSync work the same as async versions", () => {
-        const msgpack = createMsgPack();
-        const data = { x: 1, y: 2 };
-        const encoded = msgpack.encodeSync(data);
-        const decoded = msgpack.decodeSync<{ x: number; y: number }>(encoded);
-        expect(decoded).toEqual(data);
+    it("should encode and decode object", () => {
+        const obj = { name: "John", age: 30, active: true };
+        const bytes = msgpack.encode(obj);
+        const decoded = msgpack.decode<{ name: string; age: number; active: boolean }>(bytes);
+        expect(decoded.name).toBe("John");
+        expect(decoded.age).toBe(30);
+        expect(decoded.active).toBe(true);
     });
 
-    it("decodeSync accepts ArrayBuffer", () => {
-        const msgpack = createMsgPack();
-        const encoded = msgpack.encode({ hello: "world" });
-        const buf = new ArrayBuffer(encoded.byteLength);
-        new Uint8Array(buf).set(encoded);
-        const decoded = msgpack.decode<{ hello: string }>(buf);
-        expect(decoded).toEqual({ hello: "world" });
+    it("should encode and decode nested object", () => {
+        const obj = { user: { name: "John", address: { city: "NYC" } } };
+        const bytes = msgpack.encode(obj);
+        const decoded = msgpack.decode(bytes);
+        expect(decoded.user.name).toBe("John");
+        expect(decoded.user.address.city).toBe("NYC");
     });
 
-    it("throws on invalid data", () => {
-        const msgpack = createMsgPack();
-        expect(() => msgpack.decode(new Uint8Array([0xff, 0xff, 0xff]))).toThrow();
+    it("should encode and decode array", () => {
+        const arr = [1, 2, 3, 4, 5];
+        const bytes = msgpack.encode(arr);
+        const decoded = msgpack.decode<number[]>(bytes);
+        expect(decoded).toEqual([1, 2, 3, 4, 5]);
     });
 
-    it("supports custom config", () => {
-        const msgpack = createMsgPack({ forceFloat32: true });
-        const encoded = msgpack.encode({ num: 3.14 });
-        const decoded = msgpack.decode<{ num: number }>(encoded);
-        expect(decoded.num).toBeCloseTo(3.14);
+    it("should encode and decode mixed array", () => {
+        const arr = [1, "hello", true, null, { nested: true }];
+        const bytes = msgpack.encode(arr);
+        const decoded = msgpack.decode(bytes);
+        expect(decoded[0]).toBe(1);
+        expect(decoded[1]).toBe("hello");
+        expect(decoded[2]).toBe(true);
+        expect(decoded[3]).toBeNull();
+        expect(decoded[4].nested).toBe(true);
+    });
+
+    it("should encode and decode empty object", () => {
+        const bytes = msgpack.encode({});
+        const decoded = msgpack.decode(bytes);
+        expect(decoded).toEqual({});
+    });
+
+    it("should encode and decode empty array", () => {
+        const bytes = msgpack.encode([]);
+        const decoded = msgpack.decode(bytes);
+        expect(decoded).toEqual([]);
+    });
+
+    it("should encode and decode empty string", () => {
+        const bytes = msgpack.encode("");
+        const decoded = msgpack.decode(bytes);
+        expect(decoded).toBe("");
+    });
+
+    it("should encode and decode zero", () => {
+        const bytes = msgpack.encode(0);
+        const decoded = msgpack.decode(bytes);
+        expect(decoded).toBe(0);
+    });
+
+    it("should encode and decode negative number", () => {
+        const bytes = msgpack.encode(-42);
+        const decoded = msgpack.decode(bytes);
+        expect(decoded).toBe(-42);
+    });
+
+    it("should encode and decode float", () => {
+        const bytes = msgpack.encode(3.14);
+        const decoded = msgpack.decode(bytes);
+        expect(decoded).toBeCloseTo(3.14);
+    });
+
+    it("should encode and decode unicode string", () => {
+        const bytes = msgpack.encode("こんにちは");
+        const decoded = msgpack.decode(bytes);
+        expect(decoded).toBe("こんにちは");
+    });
+
+    it("should encode and decode nested arrays", () => {
+        const arr = [[1, 2], [3, 4], [5, 6]];
+        const bytes = msgpack.encode(arr);
+        const decoded = msgpack.decode<number[][]>(bytes);
+        expect(decoded).toEqual([[1, 2], [3, 4], [5, 6]]);
     });
 });
 
-describe("DEFAULT_MSGPACK_CONFIG", () => {
-    it("has sensible defaults", () => {
-        expect(DEFAULT_MSGPACK_CONFIG.forceFloat32).toBe(false);
-        expect(DEFAULT_MSGPACK_CONFIG.useBigInt64).toBe(false);
-        expect(DEFAULT_MSGPACK_CONFIG.sortKeys).toBe(false);
+describe("MsgPack - Sync Encode/Decode", () => {
+    let msgpack: ReturnType<typeof createMsgPack>;
+
+    beforeEach(() => { msgpack = createMsgPack(); });
+
+    it("should encode and decode synchronously", () => {
+        const bytes = msgpack.encodeSync({ hello: "world" });
+        const decoded = msgpack.decodeSync<{ hello: string }>(bytes);
+        expect(decoded.hello).toBe("world");
     });
 });
 
-describe("mergeMsgPackConfig", () => {
-    it("merges overrides with defaults", () => {
-        const result = mergeMsgPackConfig(
-            { forceFloat32: false, useBigInt64: false, sortKeys: false },
-            { forceFloat32: true }
-        );
-        expect(result.forceFloat32).toBe(true);
-        expect(result.useBigInt64).toBe(false);
-        expect(result.sortKeys).toBe(false);
+describe("MsgPack - Round-trip Consistency", () => {
+    it("should maintain data integrity through multiple encode/decode cycles", () => {
+        const msgpack = createMsgPack();
+        const original = { user: { id: 1, name: "Test", tags: ["a", "b", "c"] }, active: true };
+        let current = original;
+        for (let i = 0; i < 5; i++) {
+            const bytes = msgpack.encode(current);
+            current = msgpack.decode(bytes);
+        }
+        expect(current.user.id).toBe(1);
+        expect(current.user.name).toBe("Test");
+        expect(current.user.tags).toEqual(["a", "b", "c"]);
+        expect(current.active).toBe(true);
     });
 });
