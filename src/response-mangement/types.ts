@@ -203,4 +203,4 @@ export type {
     ExpressLikeResponse,
     KoaLikeContext,
     HttpLikeServerResponse,
-} from "./adapters/types.js";
+} from "../adapters/response/types.js";

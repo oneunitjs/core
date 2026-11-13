@@ -10,9 +10,9 @@ import type {
     ServerOnlyCookieOptions,
 } from "./types.js";
 import { DEFAULT_COOKIE_CONFIG, mergeCookieOptions } from "./configs.js";
-import { createExpressCookieAdapter } from "./adapters/express.js";
-import { createKoaCookieAdapter } from "./adapters/koa.js";
-import { createHttpCookieAdapter } from "./adapters/http.js";
+import { createExpressCookieAdapter } from "../adapters/cookie/express.js";
+import { createKoaCookieAdapter } from "../adapters/cookie/koa.js";
+import { createHttpCookieAdapter } from "../adapters/cookie/http.js";
 import {
     CookieSecretRequiredError,
     CookieSecurePrefixError,

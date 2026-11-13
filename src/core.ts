@@ -126,10 +126,10 @@ import {
 import {
     createResponseManager,
     createResponseFrameworkManager,
-    createExpressAdapter,
-    createFastifyAdapter,
-    createKoaAdapter,
-    createHttpAdapter,
+    createExpressResponseAdapter,
+    createFastifyResponseAdapter,
+    createKoaResponseAdapter,
+    createHttpResponseAdapter,
     detectResponseFramework,
 } from "./response-mangement/index.js";
 import type {
@@ -716,13 +716,13 @@ export function createApp(options?: AppOptions): App {
 
             let adapter: any;
             if (detected.framework === "koa") {
-                adapter = createKoaAdapter(res as any);
+                adapter = createKoaResponseAdapter(res as any);
             } else if (detected.framework === "express") {
-                adapter = createExpressAdapter(res as any);
+                adapter = createExpressResponseAdapter(res as any);
             } else if (detected.framework === "http") {
-                adapter = createHttpAdapter(res as any);
+                adapter = createHttpResponseAdapter(res as any);
             } else {
-                adapter = createFastifyAdapter(res as any);
+                adapter = createFastifyResponseAdapter(res as any);
             }
             cachedResponseAdapter = adapter;
         } else if (cachedResponseAdapter && cachedResponseReqRes) {

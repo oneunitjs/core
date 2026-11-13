@@ -30,13 +30,13 @@ import {
     DEFAULT_RESPONSE_CONFIG,
 } from "./types.js";
 import {
-    createExpressAdapter,
-    createFastifyAdapter,
-    createKoaAdapter,
-    createHttpAdapter,
-} from "./adapters/index.js";
+    createExpressResponseAdapter,
+    createFastifyResponseAdapter,
+    createKoaResponseAdapter,
+    createHttpResponseAdapter,
+} from "../adapters/response/index.js";
 
-export { createExpressAdapter, createFastifyAdapter, createKoaAdapter, createHttpAdapter };
+export { createExpressResponseAdapter, createFastifyResponseAdapter, createKoaResponseAdapter, createHttpResponseAdapter };
 
 export class ResponseManager {
     private readonly defaultSuccessMessage: string;

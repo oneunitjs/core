@@ -47,13 +47,13 @@ export type {
     ExpressLikeResponse,
     KoaLikeContext,
     HttpLikeServerResponse,
-} from "./adapters/index.js";
+} from "../adapters/response/types.js";
 
 export {
-    createFastifyAdapter,
-    createExpressAdapter,
-    createKoaAdapter,
-    createHttpAdapter,
+    createFastifyResponseAdapter,
+    createExpressResponseAdapter,
+    createKoaResponseAdapter,
+    createHttpResponseAdapter,
     createResponseFrameworkManager,
     ResponseFrameworkManager,
     detectResponseFramework,
@@ -62,6 +62,14 @@ export {
     created,
     notFound,
     error,
+} from "./registry.js";
+
+// Backward-compatible aliases
+export {
+    createExpressResponseAdapter as createExpressAdapter,
+    createFastifyResponseAdapter as createFastifyAdapter,
+    createKoaResponseAdapter as createKoaAdapter,
+    createHttpResponseAdapter as createHttpAdapter,
 } from "./registry.js";
 
 export type {
