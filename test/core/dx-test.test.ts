@@ -381,4 +381,166 @@ describe("createApp - Unified DX", () => {
             await new Promise<void>((resolve) => testServer.close(resolve));
         });
     });
+
+    // ===== New DX Features =====
+    describe("Config sections", () => {
+        it("applies security defaults globally", () => {
+            const core = createApp({
+                security: {
+                    cors: { origin: "https://example.com", credentials: true },
+                    csrf: { cookieName: "my-csrf" },
+                    helmet: { hidePoweredBy: true },
+                    compression: { threshold: 2048 },
+                },
+            });
+
+            const cors = core.security().cors();
+            expect(cors.options.origin).toBe("https://example.com");
+            expect(cors.options.credentials).toBe(true);
+
+            const csrf = core.security().csrf();
+            expect(csrf.options.cookieName).toBe("my-csrf");
+
+            const helmet = core.security().helmet();
+            expect(helmet.options.hidePoweredBy).toBe(true);
+
+            const compression = core.security().compression();
+            expect(compression.options.threshold).toBe(2048);
+        });
+
+        it("per-call options override global defaults", () => {
+            const core = createApp({
+                security: {
+                    cors: { origin: "https://default.com" },
+                },
+            });
+
+            const cors = core.security().cors({ origin: "https://override.com" });
+            expect(cors.options.origin).toBe("https://override.com");
+        });
+
+        it("applies cookie defaults globally", () => {
+            const core = createApp({
+                cookie: {
+                    secure: true,
+                    httpOnly: true,
+                    sameSite: "strict",
+                    maxAge: 7200,
+                },
+            });
+
+            const serialized = core.cookies().serialize("session", "abc", {});
+            expect(serialized).toContain("Secure");
+            expect(serialized).toContain("HttpOnly");
+            expect(serialized).toContain("SameSite=Strict");
+            expect(serialized).toContain("Max-Age=7200");
+        });
+
+        it("applies multipart defaults globally", () => {
+            const core = createApp({
+                multipart: {
+                    maxFileSize: 5 * 1024 * 1024,
+                    maxFiles: 3,
+                    allowedMimeTypes: ["image/png"],
+                },
+            });
+
+            const mp = core.multipart();
+            const middleware = mp.multipart();
+            expect(middleware.options.maxFileSize).toBe(5 * 1024 * 1024);
+            expect(middleware.options.maxFiles).toBe(3);
+            expect(middleware.options.allowedMimeTypes).toEqual(["image/png"]);
+        });
+
+        it("applies health path default", () => {
+            const core = createApp({
+                health: { path: "/custom-health" },
+            });
+
+            const health = core.health();
+            expect(health).toBeDefined();
+        });
+    });
+
+    describe("Cached API instances", () => {
+        it("returns same health API instance on repeated calls", () => {
+            const core = createApp();
+            const h1 = core.health();
+            const h2 = core.health();
+            expect(h1).toBe(h2);
+        });
+
+        it("returns same security API instance on repeated calls", () => {
+            const core = createApp();
+            const s1 = core.security();
+            const s2 = core.security();
+            expect(s1).toBe(s2);
+        });
+
+        it("returns same hooks API instance on repeated calls", () => {
+            const core = createApp();
+            const h1 = core.hooks();
+            const h2 = core.hooks();
+            expect(h1).toBe(h2);
+        });
+
+        it("returns same msgpack API instance on repeated calls", () => {
+            const core = createApp();
+            const m1 = core.msgpack();
+            const m2 = core.msgpack();
+            expect(m1).toBe(m2);
+        });
+
+        it("returns same lib API instance on repeated calls", () => {
+            const core = createApp();
+            const l1 = core.lib();
+            const l2 = core.lib();
+            expect(l1).toBe(l2);
+        });
+
+        it("returns same config API instance on repeated calls", () => {
+            const core = createApp();
+            const c1 = core.config();
+            const c2 = core.config();
+            expect(c1).toBe(c2);
+        });
+    });
+
+    describe("Config getters and setters", () => {
+        it("get and set config values", () => {
+            const core = createApp({ serviceName: "test", port: 3000 });
+            const config = core.config();
+
+            expect(config.get("serviceName")).toBe("test");
+            expect(config.get("port")).toBe(3000);
+
+            config.set("port", 4000);
+            expect(config.get("port")).toBe(4000);
+            expect(config.port).toBe(4000);
+        });
+    });
+
+    describe("app.use() middleware registration", () => {
+        it("registers and stores middleware", () => {
+            const core = createApp();
+            const mw = (req: unknown, res: unknown, next?: () => void) => {
+                if (next) next();
+            };
+
+            const result = core.use(mw);
+            expect(result).toBe(core);
+        });
+
+        it("chains multiple use() calls", () => {
+            const core = createApp();
+            const mw1 = (req: unknown, res: unknown, next?: () => void) => {
+                if (next) next();
+            };
+            const mw2 = (req: unknown, res: unknown, next?: () => void) => {
+                if (next) next();
+            };
+
+            core.use(mw1).use(mw2);
+        });
+    });
 });

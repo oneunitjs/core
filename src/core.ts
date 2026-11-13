@@ -6,54 +6,43 @@
  * ```ts
  * import { createApp } from "@oneunit/core";
  *
- * const app = createApp({ serviceName: "my-api", secret: "my-secret" });
+ * // Simple usage with global config defaults
+ * const app = createApp({
+ *   serviceName: "my-api",
+ *   port: 3000,
+ *   secret: "my-secret",
+ *   security: {
+ *     cors: { origin: "https://example.com" },
+ *     csrf: { enabled: true },
+ *     helmet: { enabled: true },
+ *   },
+ *   cookie: { secure: true, sameSite: "lax" },
+ *   multipart: { maxFileSize: 10 * 1024 * 1024 },
+ * });
  *
- * // Health checks
+ * // Cached API instances (same object every call)
  * app.health().register("db", async () => ({ status: "healthy" }));
  * await app.health().route(expressApp);
  *
- * // Hooks
- * app.hooks().on("request", async (ctx) => { ... });
- * await app.hooks().emit("request", ctx);
+ * app.security().cors({ origin: "*" }).middleware(req, res, next);
+ * app.security().csrf({ secret: "my-secret" }).middleware(req, res, next);
  *
- * // Config
- * const config = app.config();
- * console.log(config.port, config.isProduction);
- *
- * // Cookies (auto-detects framework)
+ * // Cookies auto-detects framework; req/res optional if framework is set
  * const cookies = app.cookies(req, res);
  * cookies.set("session", "abc123", { httpOnly: true });
  *
- * // Security middleware
- * app.security().cors({ origin: "https://example.com" });
- * app.security().helmet({ hsts: { maxAge: 31536000 } });
- * app.security().csrf({ secret: "my-secret" });
- * app.security().compression({ threshold: 1024 });
- *
- * // MessagePack
- * const msgpack = app.msgpack();
- * const bytes = msgpack.encode({ hello: "world" });
- *
- * // Response helpers
- * app.response().ok(res, { data: { id: 1 } });
- * app.response().notFound(res, { message: "Not found" });
- *
- * // System info & health status
- * const info = app.lib().getSystemInfo();
- * const status = app.lib().getSystemStatus(metrics, checks);
+ * // Express-style middleware registration
+ * app.use(corsMiddleware);
+ * app.use(csrfMiddleware);
  * ```
  */
 
 import type {
-    HealthProvider,
     HealthCheckResult,
-    HealthRegistry,
     HealthServer,
-    HealthReply,
     HealthRouteOptions,
 } from "./health/types.js";
 import type {
-    HealthEnvironment,
     DetectedHealthEnvironment,
 } from "./health/system-health.js";
 
@@ -63,10 +52,8 @@ import {
     createSystemHealthProvider,
     createDockerHealthProvider,
     createKubernetesHealthProvider,
-} from "./health/index.js";
-import {
     detectHealthEnvironment,
-} from "./health/system-health.js";
+} from "./health/index.js";
 
 import {
     createHooks,
@@ -83,9 +70,11 @@ import {
 import {
     createCookieStore,
     createDetectedCookieStore,
+    DEFAULT_COOKIE_CONFIG,
 } from "./cookie/index.js";
 import type {
     CookieOptions,
+    CookieConfig,
 } from "./cookie/types.js";
 import type {
     CorsOptions,
@@ -96,18 +85,8 @@ import type {
     SanitizeOptions,
 } from "./security/types.js";
 import type {
-    SystemInfo,
-    SystemMetrics,
-    HealthChecks,
-    SystemThresholds,
-    SystemStatus,
-} from "./lib/index.js";
-import type {
     CreateConfigOptions,
 } from "./config/type.js";
-import type {
-    CookieConfig,
-} from "./cookie/types.js";
 import type {
     MultipartOptions,
 } from "./multipart/types.js";
@@ -150,42 +129,56 @@ import {
     timestamp,
     getSystemInfo,
     getSystemStatus,
+    type SystemInfo,
+    type SystemMetrics,
+    type HealthChecks,
+    type SystemThresholds,
+    type SystemStatus,
 } from "./lib/index.js";
+
+export interface SecurityDefaults {
+    cors?: CorsOptions;
+    csrf?: CsrfOptions;
+    helmet?: HelmetOptions;
+    compression?: CompressionOptions;
+    sanitize?: SanitizeOptions;
+}
 
 export interface App {
     health(): HealthAPI;
     hooks(): HooksAPI;
     config(): ConfigAPI;
-    cookies(req?: unknown, res?: unknown): CookieStoreAPI;
+    cookies(_req?: unknown, _res?: unknown): CookieStoreAPI;
     security(): SecurityAPI;
     msgpack(): MsgPackAPI;
     multipart(): MultipartAPI;
-    response(req?: unknown, res?: unknown): ResponseAPI;
+    response(_req?: unknown, _res?: unknown): ResponseAPI;
     lib(): LibAPI;
+    use(_middleware: (_req: unknown, _res: unknown, _next?: () => void) => void | Promise<void>): App;
 }
 
 export interface HealthAPI {
-    register(name: string, check: () => HealthCheckResult | Promise<HealthCheckResult>, critical?: boolean): void;
+    register(_name: string, _check: () => HealthCheckResult | Promise<HealthCheckResult>, _critical?: boolean): void;
     check(): Promise<Record<string, HealthCheckResult>>;
-    route(server: HealthServer): Promise<void>;
-    registerSystem(options?: { critical?: boolean }): void;
-    registerDocker(options?: { critical?: boolean; timeoutMs?: number; includeContainers?: boolean }): void;
-    registerKubernetes(options?: { critical?: boolean; timeoutMs?: number; includePods?: boolean }): void;
+    route(_server: HealthServer): Promise<void>;
+    registerSystem(_options?: { critical?: boolean }): void;
+    registerDocker(_options?: { critical?: boolean; timeoutMs?: number; includeContainers?: boolean }): void;
+    registerKubernetes(_options?: { critical?: boolean; timeoutMs?: number; includePods?: boolean }): void;
     detectEnvironment(): DetectedHealthEnvironment;
 }
 
 export interface HooksAPI {
-    on(name: string, listener: HookListener): HooksAPI;
-    use(name: string, listener: HookListener): HooksAPI;
-    off(name: string, listener: HookListener): HooksAPI;
-    once(name: string, listener: HookListener): HooksAPI;
-    emit(name: string, context: unknown): Promise<void>;
-    emitSync(name: string, context: unknown): void;
-    has(name: string): boolean;
-    listeners(name: string): HookListener[];
-    listenerCount(name: string): number;
+    on(_name: string, _listener: HookListener): HooksAPI;
+    use(_name: string, _listener: HookListener): HooksAPI;
+    off(_name: string, _listener: HookListener): HooksAPI;
+    once(_name: string, _listener: HookListener): HooksAPI;
+    emit(_name: string, _context: unknown): Promise<void>;
+    emitSync(_name: string, _context: unknown): void;
+    has(_name: string): boolean;
+    listeners(_name: string): HookListener[];
+    listenerCount(_name: string): number;
     clear(): HooksAPI;
-    clearHook(name: string): HooksAPI;
+    clearHook(_name: string): HooksAPI;
     toJSON(): Record<string, number>;
 }
 
@@ -198,91 +191,133 @@ export interface ConfigAPI {
     readonly isProduction: boolean;
     readonly isTest: boolean;
     toJSON(): Record<string, unknown>;
+    set(_key: string, _value: unknown): void;
+    get(_key: string): unknown;
 }
 
 export interface CookieStoreAPI {
-    get(name: string): string | undefined;
-    set(name: string, value: string, options?: CookieOptions): CookieStoreAPI;
-    delete(name: string, options?: { path?: string; domain?: string }): CookieStoreAPI;
-    has(name: string): boolean;
+    get(_name: string): string | undefined;
+    set(_name: string, _value: string, _options?: CookieOptions): CookieStoreAPI;
+    delete(_name: string, _options?: { path?: string; domain?: string }): CookieStoreAPI;
+    has(_name: string): boolean;
     all(): Record<string, string>;
     clear(): CookieStoreAPI;
-    setSigned(name: string, value: string, options?: CookieOptions): CookieStoreAPI;
-    setEncrypted(name: string, value: string, options?: CookieOptions): CookieStoreAPI;
-    getSigned(name: string): string | undefined;
-    getEncrypted(name: string): string | null;
+    setSigned(_name: string, _value: string, _options?: CookieOptions): CookieStoreAPI;
+    setEncrypted(_name: string, _value: string, _options?: CookieOptions): CookieStoreAPI;
+    getSigned(_name: string): string | undefined;
+    getEncrypted(_name: string): string | null;
+    serialize(_name: string, _value: string, _options?: CookieOptions): string;
+    parse(_cookieHeader: string): Record<string, string>;
 }
 
 export interface SecurityAPI {
-    cors(options?: CorsOptions): SecurityMiddleware;
-    csrf(options?: CsrfOptions): SecurityMiddleware;
-    helmet(options?: HelmetOptions): SecurityMiddleware;
-    compression(options?: CompressionOptions): SecurityMiddleware;
-    sanitize(options?: SanitizeOptions): Sanitizer;
+    cors(_options?: CorsOptions): SecurityMiddleware;
+    csrf(_options?: CsrfOptions): SecurityMiddleware;
+    helmet(_options?: HelmetOptions): SecurityMiddleware;
+    compression(_options?: CompressionOptions): SecurityMiddleware;
+    sanitize(_options?: SanitizeOptions): Sanitizer;
 }
 
 export interface Sanitizer {
-    sanitize(html: string, options?: SanitizeOptions): string;
-    sanitizeObject(obj: Record<string, unknown>, options?: SanitizeOptions): Record<string, unknown>;
+    sanitize(_html: string, _options?: SanitizeOptions): string;
+    sanitizeObject(_obj: Record<string, unknown>, _options?: SanitizeOptions): Record<string, unknown>;
 }
 
 export interface MultipartAPI {
-    multipart(options?: MultipartOptions): MultipartMiddleware;
+    multipart(_options?: MultipartOptions): MultipartMiddleware;
 }
 
 export interface MsgPackAPI {
-    encode(value: unknown): Uint8Array;
-    decode<T = unknown>(data: Uint8Array | ArrayBuffer): T;
-    encodeSync(value: unknown): Uint8Array;
-    decodeSync<T = unknown>(data: Uint8Array | ArrayBuffer): T;
+    encode(_value: unknown): Uint8Array;
+    decode<T = unknown>(_data: Uint8Array | ArrayBuffer): T;
+    encodeSync(_value: unknown): Uint8Array;
+    decodeSync<T = unknown>(_data: Uint8Array | ArrayBuffer): T;
 }
 
 export interface ResponseAPI {
-    ok<T = unknown>(options?: ResponseOptions<T>): void;
-    success<T = unknown>(options?: ResponseOptions<T>): void;
-    created<T = unknown>(options?: ResponseOptions<T>): void;
-    accepted<T = unknown>(options?: ResponseOptions<T>): void;
+    ok<T = unknown>(_options?: ResponseOptions<T>): void;
+    success<T = unknown>(_options?: ResponseOptions<T>): void;
+    created<T = unknown>(_options?: ResponseOptions<T>): void;
+    accepted<T = unknown>(_options?: ResponseOptions<T>): void;
     noContent(): void;
-    badRequest<T = unknown>(options?: ErrorOptions<T>): void;
-    unauthorized<T = unknown>(options?: ErrorOptions<T>): void;
-    forbidden<T = unknown>(options?: ErrorOptions<T>): void;
-    notFound<T = unknown>(options?: ErrorOptions<T>): void;
-    conflict<T = unknown>(options?: ErrorOptions<T>): void;
-    unprocessable<T = unknown>(options?: ErrorOptions<T>): void;
-    internalServerError<T = unknown>(options?: ErrorOptions<T>): void;
-    respond<T = unknown>(options: RespondOptions<T>): void;
+    badRequest<T = unknown>(_options?: ErrorOptions<T>): void;
+    unauthorized<T = unknown>(_options?: ErrorOptions<T>): void;
+    forbidden<T = unknown>(_options?: ErrorOptions<T>): void;
+    notFound<T = unknown>(_options?: ErrorOptions<T>): void;
+    conflict<T = unknown>(_options?: ErrorOptions<T>): void;
+    unprocessable<T = unknown>(_options?: ErrorOptions<T>): void;
+    internalServerError<T = unknown>(_options?: ErrorOptions<T>): void;
+    respond<T = unknown>(_options: RespondOptions<T>): void;
 }
 
 export interface LibAPI {
-    formatBytes(bytes: number, decimals?: number): string;
-    formatTime(ms: number): string;
-    timestamp(date: Date): string;
+    formatBytes(_bytes: number, _decimals?: number): string;
+    formatTime(_ms: number): string;
+    timestamp(_date: Date): string;
     getSystemInfo(): SystemInfo;
-    getSystemStatus(system: SystemMetrics, checks: HealthChecks, thresholds?: SystemThresholds): SystemStatus;
+    getSystemStatus(_system: SystemMetrics, _checks: HealthChecks, _thresholds?: SystemThresholds): SystemStatus;
 }
 
 export interface AppOptions {
-    framework?: "express" | "fastify" | "koa" | "http";
     serviceName?: string;
     port?: number;
     host?: string;
     nodeEnv?: string;
     secret?: string;
+    framework?: "express" | "fastify" | "koa" | "http";
+
+    security?: SecurityDefaults;
+    cookie?: CookieConfig;
+    multipart?: MultipartOptions;
+    health?: {
+        path?: string;
+    };
 }
 
 export function createApp(options?: AppOptions): App {
     const {
-        framework,
         serviceName = "app",
         port = 3000,
         host = "localhost",
         nodeEnv,
         secret,
+        security = {},
+        cookie = {},
+        multipart = {},
+        health = {},
     } = options ?? {};
+
+    const configOptions: CreateConfigOptions = {
+        port,
+        host,
+        serviceName,
+        nodeEnv,
+    };
+
+    const config = createConfig(configOptions);
+
+    const configAPI: ConfigAPI = {
+        get port() { return config.port; },
+        get host() { return config.host; },
+        get serviceName() { return config.serviceName; },
+        get nodeEnv() { return config.nodeEnv; },
+        get isDevelopment() { return config.isDevelopment; },
+        get isProduction() { return config.isProduction; },
+        get isTest() { return config.isTest; },
+        toJSON() {
+            return config.toJSON() as unknown as Record<string, unknown>;
+        },
+        set(key, value) {
+            (config as any)[key] = value;
+        },
+        get(key) {
+            return (config as any)[key];
+        },
+    };
 
     const healthRegistry = createHealthRegistry();
     const healthRoute = createHealthRoute(healthRegistry, {
-        path: "/health",
+        path: health.path ?? "/health",
         serviceName,
     } as HealthRouteOptions);
 
@@ -293,8 +328,8 @@ export function createApp(options?: AppOptions): App {
         async check() {
             return healthRegistry.checkAll();
         },
-        async route(server) {
-            await (healthRoute as unknown as (server: HealthServer) => Promise<void>)(server);
+        async route(_server) {
+            await (healthRoute as unknown as (_server: HealthServer) => Promise<void>)(_server);
         },
         registerSystem(options) {
             healthRegistry.register(createSystemHealthProvider(options));
@@ -357,80 +392,99 @@ export function createApp(options?: AppOptions): App {
         },
     };
 
-    const config = createConfig({
-        port,
-        host,
-        serviceName,
-        nodeEnv,
-    } as CreateConfigOptions);
-
-    const configAPI: ConfigAPI = {
-        get port() { return config.port; },
-        get host() { return config.host; },
-        get serviceName() { return config.serviceName; },
-        get nodeEnv() { return config.nodeEnv; },
-        get isDevelopment() { return config.isDevelopment; },
-        get isProduction() { return config.isProduction; },
-        get isTest() { return config.isTest; },
-        toJSON() {
-            return config.toJSON() as unknown as Record<string, unknown>;
-        },
+    const cookieConfig: CookieConfig = {
+        secret,
+        ...DEFAULT_COOKIE_CONFIG,
+        ...cookie,
     };
 
-    const cookieStoreAPI = (req?: unknown, res?: unknown): CookieStoreAPI => {
-        const store = createDetectedCookieStore(req, res, undefined, {
-            secret,
-        } as CookieConfig);
+    let cachedCookieStore: ReturnType<typeof createDetectedCookieStore> | null = null;
+    let cachedCookieReqRes: { req: unknown; res: unknown } | null = null;
+
+    function buildCookieAPI(store: ReturnType<typeof createDetectedCookieStore>): CookieStoreAPI {
         return {
             get(name) { return store.get(name); },
             set(name, value, options) {
                 store.set(name, value, options);
-                return store;
+                return api;
             },
             delete(name, options) {
                 store.delete(name, options);
-                return store;
+                return api;
             },
             has(name) { return store.has(name); },
             all() { return store.all(); },
             clear() {
                 store.clear();
-                return store;
+                return api;
             },
             setSigned(name, value, options) {
                 store.setSigned(name, value, options);
-                return store;
+                return api;
             },
             setEncrypted(name, value, options) {
                 store.setEncrypted(name, value, options);
-                return store;
+                return api;
             },
             getSigned(name) { return store.getSigned(name); },
             getEncrypted(name) { return store.getEncrypted(name); },
+            serialize(name, value, options) {
+                return store.serialize(name, value, options);
+            },
+            parse(cookieHeader) {
+                return store.parse(cookieHeader);
+            },
         };
+    }
+
+    let api: CookieStoreAPI;
+
+    const cookieStoreAPI = (req?: unknown, res?: unknown): CookieStoreAPI => {
+        if (req && res) {
+            cachedCookieReqRes = { req, res };
+            cachedCookieStore = createDetectedCookieStore(req, res, undefined, cookieConfig);
+            api = buildCookieAPI(cachedCookieStore);
+            return api;
+        }
+
+        if (cachedCookieStore && cachedCookieReqRes) {
+            api = buildCookieAPI(cachedCookieStore);
+            return api;
+        }
+
+        cachedCookieStore = createCookieStore(cookieConfig) as ReturnType<typeof createDetectedCookieStore>;
+        cachedCookieReqRes = { req: undefined, res: undefined };
+        api = buildCookieAPI(cachedCookieStore);
+        return api;
     };
 
     const securityAPI: SecurityAPI = {
         cors(options) {
-            return createCors(options);
+            const merged: CorsOptions = { ...security.cors, ...options };
+            return createCors(merged);
         },
         csrf(options) {
-            return createCsrf(options);
+            const merged: CsrfOptions = { ...security.csrf, ...options, secret: options?.secret ?? secret };
+            return createCsrf(merged);
         },
         helmet(options) {
-            return createHelmet(options);
+            const merged: HelmetOptions = { ...security.helmet, ...options };
+            return createHelmet(merged);
         },
         compression(options) {
-            return createCompression(options);
+            const merged: CompressionOptions = { ...security.compression, ...options };
+            return createCompression(merged);
         },
         sanitize(options) {
-            return createSanitizer(options);
+            const merged: SanitizeOptions = { ...security.sanitize, ...options };
+            return createSanitizer(merged);
         },
     };
 
     const multipartAPI: MultipartAPI = {
         multipart(options) {
-            return createMultipart(options);
+            const merged: MultipartOptions = { ...multipart, ...options };
+            return createMultipart(merged);
         },
     };
 
@@ -443,17 +497,19 @@ export function createApp(options?: AppOptions): App {
         decodeSync<T>(data: Uint8Array | ArrayBuffer) { return msgpack.decodeSync<T>(data as any); },
     };
 
-    const responseAPI = (req?: unknown, res?: unknown): ResponseAPI => {
-        const manager = createResponseManager();
-        let adapter: any;
+    let cachedResponseAdapter: any = null;
+    let cachedResponseReqRes: { req: unknown; res: unknown } | null = null;
 
+    const responseAPI = (req?: unknown, res?: unknown): ResponseAPI => {
         if (req && res) {
+            cachedResponseReqRes = { req, res };
             const detected = detectResponseFramework(
-                (req as any).headers,
+                (req as any)?.headers,
                 res as any,
-                (res as any).ctx,
+                (res as any)?.ctx,
             );
 
+            let adapter: any;
             if (detected.framework === "koa") {
                 adapter = createKoaAdapter(res as any);
             } else if (detected.framework === "express") {
@@ -463,9 +519,15 @@ export function createApp(options?: AppOptions): App {
             } else {
                 adapter = createFastifyAdapter(res as any);
             }
+            cachedResponseAdapter = adapter;
+        } else if (cachedResponseAdapter && cachedResponseReqRes) {
+            // Return cached adapter-based API
         } else {
-            throw new Error("response() requires req and res arguments");
+            throw new Error("response() requires req and res arguments on first call");
         }
+
+        const manager = createResponseManager();
+        const adapter = cachedResponseAdapter;
 
         const rfm = createResponseFrameworkManager(manager, adapter);
 
@@ -504,7 +566,14 @@ export function createApp(options?: AppOptions): App {
         },
     };
 
-    return {
+    const middlewares: Array<(_req: unknown, _res: unknown, _next?: () => void) => void | Promise<void>> = [];
+
+    function use(_middleware: (_req: unknown, _res: unknown, _next?: () => void) => void | Promise<void>): App {
+        middlewares.push(_middleware);
+        return appInstance;
+    }
+
+    const appInstance: App = {
         health: () => healthAPI,
         hooks: () => hooksAPI,
         config: () => configAPI,
@@ -514,5 +583,8 @@ export function createApp(options?: AppOptions): App {
         msgpack: () => msgpackAPI,
         response: responseAPI,
         lib: () => libAPI,
+        use,
     };
+
+    return appInstance;
 }
