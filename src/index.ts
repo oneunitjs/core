@@ -6,4 +6,5 @@ export * from "./cookie/index.js";
 export * from "./msgpack/index.js";
 export * from "./response-mangement/index.js";
 export * from "./security/index.js";
+export * from "./multipart/index.js";
 export * from "./core/index.js";

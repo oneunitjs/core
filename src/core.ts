@@ -108,6 +108,9 @@ import type {
 import type {
     CookieConfig,
 } from "./cookie/types.js";
+import type {
+    MultipartOptions,
+} from "./multipart/types.js";
 
 import {
     createCors,
@@ -116,6 +119,11 @@ import {
     createCompression,
     createSanitizer,
 } from "./security/index.js";
+
+import {
+    createMultipart,
+    type MultipartMiddleware,
+} from "./multipart/index.js";
 
 import {
     createMsgPack,
@@ -151,6 +159,7 @@ export interface App {
     cookies(req?: unknown, res?: unknown): CookieStoreAPI;
     security(): SecurityAPI;
     msgpack(): MsgPackAPI;
+    multipart(): MultipartAPI;
     response(req?: unknown, res?: unknown): ResponseAPI;
     lib(): LibAPI;
 }
@@ -215,6 +224,10 @@ export interface SecurityAPI {
 export interface Sanitizer {
     sanitize(html: string, options?: SanitizeOptions): string;
     sanitizeObject(obj: Record<string, unknown>, options?: SanitizeOptions): Record<string, unknown>;
+}
+
+export interface MultipartAPI {
+    multipart(options?: MultipartOptions): MultipartMiddleware;
 }
 
 export interface MsgPackAPI {
@@ -415,6 +428,12 @@ export function createApp(options?: AppOptions): App {
         },
     };
 
+    const multipartAPI: MultipartAPI = {
+        multipart(options) {
+            return createMultipart(options);
+        },
+    };
+
     const msgpack = createMsgPack();
 
     const msgpackAPI: MsgPackAPI = {
@@ -491,6 +510,7 @@ export function createApp(options?: AppOptions): App {
         config: () => configAPI,
         cookies: cookieStoreAPI,
         security: () => securityAPI,
+        multipart: () => multipartAPI,
         msgpack: () => msgpackAPI,
         response: responseAPI,
         lib: () => libAPI,
