@@ -248,14 +248,14 @@ export interface LifecycleAPI {
     registerMiddleware(
         _name: string,
         _type: string,
-        _middleware: (req: unknown, res: unknown, next?: () => void) => void | Promise<void>,
+        _middleware: (_req: unknown, _res: unknown, _next?: () => void) => void | Promise<void>,
         _options?: { priority?: number; conflictTypes?: string[]; version?: string },
     ): { success: boolean; conflicts: ConflictInfo[]; error?: string };
     unregisterMiddleware(_name: string): boolean;
     registerPlugin(
         _name: string,
         _namespace: string,
-        _hooks: Record<string, Array<(context: unknown) => void | Promise<void>>>,
+        _hooks: Record<string, Array<(_context: unknown) => void | Promise<void>>>,
         _options?: { priority?: number; version?: string },
     ): { success: boolean; conflicts: ConflictInfo[]; error?: string };
     unregisterPlugin(_name: string, _namespace: string): boolean;
