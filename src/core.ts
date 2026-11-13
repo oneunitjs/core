@@ -112,6 +112,7 @@ import {
     type MiddlewareRegistration,
     type PluginRegistration,
     type ConflictInfo,
+    type HeaderConflict,
     type MiddlewareResult,
     type PluginResult,
     type PluginContext,
@@ -166,6 +167,7 @@ export interface App {
     msgpack(): MsgPackAPI;
     multipart(): MultipartAPI;
     lifecycle(): LifecycleAPI;
+    createLifecycle(_options?: LifecycleOptions): LifecycleAPI;
     response(_req?: unknown, _res?: unknown): ResponseAPI;
     lib(): LibAPI;
     use(_middleware: (_req: unknown, _res: unknown, _next?: () => void) => void | Promise<void>): App;
@@ -222,6 +224,8 @@ export interface CookieStoreAPI {
     getEncrypted(_name: string): string | null;
     serialize(_name: string, _value: string, _options?: CookieOptions): string;
     parse(_cookieHeader: string): Record<string, string>;
+    createStore(_name: string, _config?: CookieConfig): CookieStoreAPI;
+    getStore(_name: string): CookieStoreAPI | undefined;
 }
 
 export interface SecurityAPI {
@@ -249,7 +253,7 @@ export interface LifecycleAPI {
         _name: string,
         _type: string,
         _middleware: (_req: unknown, _res: unknown, _next?: () => void) => void | Promise<void>,
-        _options?: { priority?: number; conflictTypes?: string[]; version?: string },
+        _options?: { priority?: number; conflictTypes?: string[]; version?: string; trackHeaders?: string[] },
     ): { success: boolean; conflicts: ConflictInfo[]; error?: string };
     unregisterMiddleware(_name: string): boolean;
     registerPlugin(
@@ -290,6 +294,7 @@ export interface LifecycleAPI {
     getValidationReport(): {
         safe: boolean;
         conflicts: ConflictInfo[];
+        headerConflicts: HeaderConflict[];
         warnings: ConflictInfo[];
         errors: ConflictInfo[];
     };
@@ -470,6 +475,7 @@ export function createApp(options?: AppOptions): App {
 
     let cachedCookieStore: ReturnType<typeof createDetectedCookieStore> | null = null;
     let cachedCookieReqRes: { req: unknown; res: unknown } | null = null;
+    const namedCookieStores: Map<string, ReturnType<typeof createDetectedCookieStore>> = new Map();
 
     function buildCookieAPI(store: ReturnType<typeof createDetectedCookieStore>): CookieStoreAPI {
         return {
@@ -504,7 +510,29 @@ export function createApp(options?: AppOptions): App {
             parse(cookieHeader) {
                 return store.parse(cookieHeader);
             },
+            createStore(name, config) {
+                return createNamedCookieStore(name, config);
+            },
+            getStore(name) {
+                const namedStore = namedCookieStores.get(name);
+                if (!namedStore) return undefined;
+                return buildCookieAPI(namedStore);
+            },
         };
+    }
+
+    function createNamedCookieStore(name: string, config?: CookieConfig): CookieStoreAPI {
+        if (namedCookieStores.has(name)) {
+            return buildCookieAPI(namedCookieStores.get(name)!);
+        }
+        const storeConfig: CookieConfig = {
+            secret,
+            ...DEFAULT_COOKIE_CONFIG,
+            ...config,
+        };
+        const store = createCookieStore(storeConfig) as ReturnType<typeof createDetectedCookieStore>;
+        namedCookieStores.set(name, store);
+        return buildCookieAPI(store);
     }
 
     let api: CookieStoreAPI;
@@ -570,6 +598,9 @@ export function createApp(options?: AppOptions): App {
 
     lifecycleManager.initialize();
 
+    const lifecycleInstances: Map<string, LifecycleManager> = new Map();
+    lifecycleInstances.set("default", lifecycleManager);
+
     const lifecycleAPI: LifecycleAPI = {
         mode() { return lifecycleManager.getMode(); },
         setMode(mode) { return lifecycleManager.setMode(mode); },
@@ -607,6 +638,59 @@ export function createApp(options?: AppOptions): App {
             return lifecycleManager.createPluginContext(name, namespace);
         },
     };
+
+    function createLifecycle(_options?: LifecycleOptions): LifecycleAPI {
+        const mgr = new LifecycleManager({
+            mode: _options?.mode ?? "advanced",
+            executionTimeoutMs: _options?.executionTimeoutMs,
+            throwOnError: _options?.throwOnError,
+            maxMiddleware: _options?.maxMiddleware,
+            maxPlugins: _options?.maxPlugins,
+            allowedMiddlewareTypes: _options?.allowedMiddlewareTypes,
+            autoRegisterEssential: _options?.autoRegisterEssential,
+        });
+        mgr.initialize();
+        const id = `lifecycle-${lifecycleInstances.size + 1}`;
+        lifecycleInstances.set(id, mgr);
+
+        return {
+            mode() { return mgr.getMode(); },
+            setMode(mode) { return mgr.setMode(mode); },
+            initialize() { return mgr.initialize(); },
+            registerMiddleware(name, type, middleware, opts) {
+                return mgr.registerMiddleware(name, type, middleware, opts);
+            },
+            unregisterMiddleware(name) { return mgr.unregisterMiddleware(name); },
+            registerPlugin(name, namespace, hooks, opts) {
+                return mgr.registerPlugin(name, namespace, hooks, opts);
+            },
+            unregisterPlugin(name, namespace) { return mgr.unregisterPlugin(name, namespace); },
+            async executeMiddleware(name, req, res, phase) {
+                return mgr.executeMiddleware(name, req, res, phase);
+            },
+            async executeMiddlewareChain(req, res, phase) {
+                return mgr.executeMiddlewareChain(req, res, phase);
+            },
+            async executeHook(hookName, context) {
+                return mgr.executeHook(hookName, context);
+            },
+            async executeHookIsolated(hookName, context, namespace) {
+                return mgr.executeHookIsolated(hookName, context, namespace);
+            },
+            getState() { return mgr.getState(); },
+            getMiddlewareList() { return mgr.getMiddlewareList(); },
+            getPluginList() { return mgr.getPluginList(); },
+            getNamespaces() { return mgr.getNamespaces(); },
+            hasMiddleware(name) { return mgr.hasMiddleware(name); },
+            hasPlugin(name, namespace) { return mgr.hasPlugin(name, namespace); },
+            clear() { mgr.clear(); },
+            isSafe() { return mgr.isSafe(); },
+            getValidationReport() { return mgr.getValidationReport(); },
+            createPluginContext(name, namespace) {
+                return mgr.createPluginContext(name, namespace);
+            },
+        };
+    }
 
     const msgpack = createMsgPack();
 
@@ -701,6 +785,7 @@ export function createApp(options?: AppOptions): App {
         security: () => securityAPI,
         multipart: () => multipartAPI,
         lifecycle: () => lifecycleAPI,
+        createLifecycle,
         msgpack: () => msgpackAPI,
         response: responseAPI,
         lib: () => libAPI,

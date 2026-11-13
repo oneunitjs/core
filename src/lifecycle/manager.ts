@@ -11,9 +11,11 @@ import {
     type MiddlewareContext,
     type MiddlewareResult,
     type PluginResult,
+    type HeaderConflict,
 } from "./types.js";
 import { MiddlewareRegistry } from "./middleware-registry.js";
 import { PluginSystem } from "./plugin-system.js";
+import type { FrameworkType } from "./adapters/types.js";
 
 export class LifecycleManager {
     private mode: LifecycleMode;
@@ -89,10 +91,10 @@ export class LifecycleManager {
         name: string,
         type: string,
         middleware: (_req: unknown, _res: unknown, _next?: () => void) => void | Promise<void>,
-        options?: { priority?: number; conflictTypes?: string[]; version?: string },
-    ): { success: boolean; conflicts: ConflictInfo[]; error?: string } {
+        options?: { priority?: number; conflictTypes?: string[]; version?: string; trackHeaders?: string[] },
+    ): { success: boolean; conflicts: ConflictInfo[]; headerConflicts: HeaderConflict[]; error?: string } {
         if (!this.initialized) {
-            return { success: false, conflicts: [], error: "Lifecycle not initialized" };
+            return { success: false, conflicts: [], headerConflicts: [], error: "Lifecycle not initialized" };
         }
 
         const result = this.middleware.register(name, type, middleware, options);
@@ -101,6 +103,7 @@ export class LifecycleManager {
             return {
                 success: false,
                 conflicts: result.conflicts,
+                headerConflicts: result.headerConflicts,
                 error: result.error ?? `Middleware "${name}" registration failed`,
             };
         }
@@ -216,6 +219,7 @@ export class LifecycleManager {
             middlewareCount: this.middleware.size(),
             pluginCount: this.plugins.size(),
             conflicts: this.middleware.getConflicts(),
+            headerConflicts: this.middleware.getHeaderConflicts(),
             executionCount: this.executionCount,
             errorCount: this.errorCount,
         };
@@ -253,6 +257,51 @@ export class LifecycleManager {
         return this.plugins.createContext(name, namespace);
     }
 
+    /**
+     * Create a framework-specific middleware function that executes the lifecycle
+     * middleware chain. Use this as framework middleware (Express app.use, Fastify
+     * hook, Koa middleware, node:http request listener).
+     */
+    createLifecycleMiddleware(_framework: FrameworkType = "express"): any {
+        const registrations = this.middleware.list();
+
+        // Create a combined middleware that runs all registered middleware in order
+        return async (req: any, res: any, next?: any) => {
+            let chainAborted = false;
+            const ctx: MiddlewareContext = {
+                req,
+                res,
+                next: () => { chainAborted = true; },
+                phase: "request",
+                abort: () => { chainAborted = true; },
+                aborted: false,
+            };
+
+            for (const reg of registrations) {
+                if (chainAborted) break;
+
+                const result = await this.middleware.execute(reg.name, {
+                    ...ctx,
+                    phase: ctx.phase,
+                });
+
+                if (!result.success && !result.aborted) {
+                    continue;
+                }
+
+                if (result.aborted) {
+                    chainAborted = true;
+                    break;
+                }
+            }
+
+            // If using Express-style next, call it unless aborted
+            if (next && !chainAborted) {
+                next();
+            }
+        };
+    }
+
     isSafe(): boolean {
         const state = this.getState();
         return state.conflicts.filter((c) => c.severity === "error").length === 0;
@@ -261,13 +310,16 @@ export class LifecycleManager {
     getValidationReport(): {
         safe: boolean;
         conflicts: ConflictInfo[];
+        headerConflicts: HeaderConflict[];
         warnings: ConflictInfo[];
         errors: ConflictInfo[];
     } {
         const conflicts = this.middleware.getConflicts();
+        const headerConflicts = this.middleware.getHeaderConflicts();
         return {
-            safe: conflicts.filter((c) => c.severity === "error").length === 0,
+            safe: conflicts.filter((c) => c.severity === "error").length === 0 && headerConflicts.length === 0,
             conflicts,
+            headerConflicts,
             warnings: conflicts.filter((c) => c.severity === "warning"),
             errors: conflicts.filter((c) => c.severity === "error"),
         };

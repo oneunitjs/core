@@ -23,6 +23,7 @@ export interface MiddlewareRegistration {
     priority: number;
     conflictTypes?: string[];
     version: string;
+    trackHeaders?: string[];
 }
 
 export interface PluginRegistration {
@@ -41,12 +42,19 @@ export interface ConflictInfo {
     severity: "warning" | "error";
 }
 
+export interface HeaderConflict {
+    header: string;
+    setBy: string[];
+    severity: "warning" | "error";
+}
+
 export interface LifecycleState {
     mode: LifecycleMode;
     initialized: boolean;
     middlewareCount: number;
     pluginCount: number;
     conflicts: ConflictInfo[];
+    headerConflicts: HeaderConflict[];
     executionCount: number;
     errorCount: number;
 }

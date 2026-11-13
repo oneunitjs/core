@@ -3,6 +3,7 @@ import type {
     MiddlewareContext,
     MiddlewareResult,
     ConflictInfo,
+    HeaderConflict,
     LifecycleOptions,
 } from "./types.js";
 
@@ -41,9 +42,38 @@ function detectConflict(
     return conflicts;
 }
 
+function detectHeaderConflicts(
+    registrations: MiddlewareRegistration[],
+): HeaderConflict[] {
+    const headerToMiddlewares: Map<string, string[]> = new Map();
+
+    for (const reg of registrations) {
+        if (reg.trackHeaders) {
+            for (const header of reg.trackHeaders) {
+                const existing = headerToMiddlewares.get(header) ?? [];
+                headerToMiddlewares.set(header, [...existing, reg.name]);
+            }
+        }
+    }
+
+    const conflicts: HeaderConflict[] = [];
+    for (const [header, names] of headerToMiddlewares) {
+        if (names.length > 1) {
+            conflicts.push({
+                header,
+                setBy: names,
+                severity: "warning",
+            });
+        }
+    }
+
+    return conflicts;
+}
+
 export class MiddlewareRegistry {
     private readonly middleware: Map<string, MiddlewareRegistration> = new Map();
     private readonly conflicts: ConflictInfo[] = [];
+    private readonly headerConflicts: HeaderConflict[] = [];
     private readonly maxMiddleware: number;
     private readonly allowedTypes: Set<string> | null;
     private readonly executionTimeoutMs: number;
@@ -60,12 +90,13 @@ export class MiddlewareRegistry {
         name: string,
         type: string,
         middleware: (_req: unknown, _res: unknown, _next?: () => void) => void | Promise<void>,
-        options: { priority?: number; conflictTypes?: string[]; version?: string } = {},
-    ): { success: boolean; conflicts: ConflictInfo[]; error?: string } {
+        options: { priority?: number; conflictTypes?: string[]; version?: string; trackHeaders?: string[] } = {},
+    ): { success: boolean; conflicts: ConflictInfo[]; headerConflicts: HeaderConflict[]; error?: string } {
         if (this.middleware.size >= this.maxMiddleware) {
             return {
                 success: false,
                 conflicts: [],
+                headerConflicts: [],
                 error: `Maximum middleware limit (${this.maxMiddleware}) reached`,
             };
         }
@@ -74,6 +105,7 @@ export class MiddlewareRegistry {
             return {
                 success: false,
                 conflicts: [],
+                headerConflicts: [],
                 error: `Middleware type "${type}" is not allowed in current mode`,
             };
         }
@@ -87,14 +119,20 @@ export class MiddlewareRegistry {
             priority: options.priority ?? 0,
             conflictTypes: options.conflictTypes,
             version: options.version ?? "1.0.0",
+            trackHeaders: options.trackHeaders,
         };
 
         this.middleware.set(name, registration);
         this.conflicts.push(...conflicts);
 
+        // Recompute header conflicts after each registration
+        this.headerConflicts.length = 0;
+        this.headerConflicts.push(...detectHeaderConflicts([...this.middleware.values()]));
+
         return {
             success: conflicts.length === 0,
             conflicts,
+            headerConflicts: this.headerConflicts,
         };
     }
 
@@ -109,6 +147,10 @@ export class MiddlewareRegistry {
             this.conflicts.length,
             ...this.conflicts.filter((c) => c.name !== name && !c.conflictWith.includes(name)),
         );
+
+        // Recompute header conflicts
+        this.headerConflicts.length = 0;
+        this.headerConflicts.push(...detectHeaderConflicts([...this.middleware.values()]));
 
         return true;
     }
@@ -125,9 +167,14 @@ export class MiddlewareRegistry {
         return [...this.conflicts];
     }
 
+    getHeaderConflicts(): HeaderConflict[] {
+        return [...this.headerConflicts];
+    }
+
     clear(): void {
         this.middleware.clear();
         this.conflicts.length = 0;
+        this.headerConflicts.length = 0;
     }
 
     has(name: string): boolean {
@@ -162,6 +209,18 @@ export class MiddlewareRegistry {
             originalNext();
         };
 
+        // Wrap res.setHeader to track headers if trackHeaders is configured
+        const res = ctx.res as any;
+        const originalSetHeader = res?.setHeader;
+        const setHeaders: string[] = [];
+
+        if (reg.trackHeaders && typeof originalSetHeader === "function") {
+            res.setHeader = (key: string, value: any) => {
+                setHeaders.push(key.toLowerCase());
+                return originalSetHeader.call(res, key, value);
+            };
+        }
+
         let timeoutId: NodeJS.Timeout | null = null;
         const timeoutPromise = new Promise<never>((_, reject) => {
             timeoutId = setTimeout(() => {
@@ -178,6 +237,10 @@ export class MiddlewareRegistry {
             ]);
         } catch (err) {
             clearTimeout(timeoutId!);
+            // Restore original setHeader
+            if (reg.trackHeaders && typeof originalSetHeader === "function") {
+                res.setHeader = originalSetHeader;
+            }
             return {
                 success: false,
                 aborted,
@@ -187,6 +250,11 @@ export class MiddlewareRegistry {
         }
 
         clearTimeout(timeoutId!);
+
+        // Restore original setHeader
+        if (reg.trackHeaders && typeof originalSetHeader === "function") {
+            res.setHeader = originalSetHeader;
+        }
 
         // If middleware didn't call next(), treat as aborting the chain
         if (!nextCalled) {
