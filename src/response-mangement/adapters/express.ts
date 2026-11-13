@@ -1,5 +1,6 @@
 import type { ExpressLikeResponse, ResponseFrameworkAdapter } from "./types.js";
 import { isBodylessStatus } from "../types.js";
+import { ResponseAlreadySentError } from "../../errors/response.js";
 
 export function createExpressAdapter(res: ExpressLikeResponse): ResponseFrameworkAdapter {
     return {
@@ -7,7 +8,7 @@ export function createExpressAdapter(res: ExpressLikeResponse): ResponseFramewor
 
         send({ status, body, headers }) {
             if (res.headersSent) {
-                throw new Error("Response has already been sent");
+                throw new ResponseAlreadySentError();
             }
 
             if (headers) {

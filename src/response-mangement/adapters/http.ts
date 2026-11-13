@@ -1,5 +1,6 @@
 import type { HttpLikeServerResponse, ResponseFrameworkAdapter } from "./types.js";
 import { isBodylessStatus } from "../types.js";
+import { ResponseAlreadySentError } from "../../errors/response.js";
 
 export function createHttpAdapter(res: HttpLikeServerResponse): ResponseFrameworkAdapter {
     return {
@@ -7,7 +8,7 @@ export function createHttpAdapter(res: HttpLikeServerResponse): ResponseFramewor
 
         send({ status, body, headers }) {
             if (res.headersSent || res.writableEnded) {
-                throw new Error("Response has already been sent");
+                throw new ResponseAlreadySentError();
             }
 
             const allHeaders: Record<string, string> = {};

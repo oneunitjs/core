@@ -117,6 +117,7 @@ import {
     type PluginResult,
     type PluginContext,
 } from "./lifecycle/index.js";
+import { ResponseRequiresRequestResponseError } from "./errors/core.js";
 
 import {
     createMsgPack,
@@ -727,7 +728,7 @@ export function createApp(options?: AppOptions): App {
         } else if (cachedResponseAdapter && cachedResponseReqRes) {
             // Return cached adapter-based API
         } else {
-            throw new Error("response() requires req and res arguments on first call");
+            throw new ResponseRequiresRequestResponseError();
         }
 
         const manager = createResponseManager();

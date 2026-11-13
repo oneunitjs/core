@@ -5,6 +5,7 @@ import type {
     MultipartResult,
 } from "./types.js";
 import { parseMultipart } from "./parser.js";
+import { MultipartDisabledError } from "../errors/multipart.js";
 
 const DEFAULT_MULTIPART_OPTIONS: MultipartOptions = {};
 
@@ -25,7 +26,7 @@ export function createMultipart(options: MultipartOptions = {}): MultipartMiddle
 
     async function parse(req: unknown): Promise<MultipartResult> {
         if (!enabled) {
-            throw new Error("Multipart middleware is disabled");
+            throw new MultipartDisabledError();
         }
         return parseMultipart(req, merged);
     }

@@ -1,3 +1,11 @@
+import {
+    InvalidBytesError,
+    NegativeBytesError,
+    InvalidTimeError,
+    NegativeTimeError,
+    InvalidDateError,
+} from "../errors/lib.js";
+
 /**
  * Format a byte value into a human-readable size.
  *
@@ -12,11 +20,11 @@
  */
 export function formatBytes(bytes: number, decimals = 2): string {
     if (!Number.isFinite(bytes)) {
-        throw new Error("Bytes must be a finite number");
+        throw new InvalidBytesError();
     }
 
     if (bytes < 0) {
-        throw new Error("Bytes must be positive");
+        throw new NegativeBytesError();
     }
 
     if (bytes === 0) {
@@ -59,10 +67,10 @@ export function formatBytes(bytes: number, decimals = 2): string {
  */
 export function formatTime(ms: number): string {
     if (!Number.isFinite(ms)) {
-        throw new Error("Time must be a finite number");
+        throw new InvalidTimeError();
     }
     if (ms < 0) {
-        throw new Error("Time must be positive");
+        throw new NegativeTimeError();
     }
     if (ms < 1000) {
         return `${Number(ms.toFixed(2))}ms`;
@@ -103,7 +111,7 @@ export function formatTime(ms: number): string {
  */
 export function timestamp(data: Date): string {
     if (!(data instanceof Date)) {
-        throw new Error("Data must be a Date object");
+        throw new InvalidDateError();
     }
     return data.toISOString();
 }

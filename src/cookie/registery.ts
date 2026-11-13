@@ -14,6 +14,12 @@ import { createExpressCookieAdapter } from "./adapters/express.js";
 import { createFastifyCookieAdapter } from "./adapters/fastify.js";
 import { createKoaCookieAdapter } from "./adapters/koa.js";
 import { createHttpCookieAdapter } from "./adapters/http.js";
+import {
+    CookieSecretRequiredError,
+    InvalidCookieNameError,
+    CookieSecurePrefixError,
+    SameSiteNoneRequiresSecureError,
+} from "../errors/cookie.js";
 
 const GCM_TAG_LENGTH = 16;
 const GCM_IV_LENGTH = 12;
@@ -64,7 +70,7 @@ function decryptValue(encrypted: string, options: Required<ServerOnlyCookieOptio
 }
 
 function requiredSecret(secret: string | undefined, name: string, kind: string): string {
-    if (!secret) throw new Error(`Secret required for ${kind} cookie "${name}"`);
+    if (!secret) throw new CookieSecretRequiredError(name, kind);
     return secret;
 }
 
@@ -77,7 +83,7 @@ function sameSiteAttr(value: CookieOptions["sameSite"] | undefined): string | un
 
 function validateCookieName(name: string): void {
     if (!name || /[=;\s]/.test(name)) {
-        throw new Error(`Invalid cookie name: ${name}`);
+        throw new InvalidCookieNameError(name);
     }
 }
 
@@ -90,20 +96,26 @@ function serializeCookie(name: string, value: string, options: CookieOptions): s
 
     if (hasSecurePrefix(name)) {
         if (options.secure !== true) {
-            throw new Error(`Cookie "${name}" with __Secure- or __Host- prefix requires Secure attribute`);
+            throw new CookieSecurePrefixError(name, "requires Secure attribute", {
+                details: { name, path: options.path, domain: options.domain },
+            });
         }
         if (name.startsWith("__Host-")) {
             if (options.path !== "/" && options.path !== undefined) {
-                throw new Error(`Cookie "${name}" with __Host- prefix must have Path=/`);
+                throw new CookieSecurePrefixError(name, "with __Host- prefix must have Path=/", {
+                    details: { name, path: options.path },
+                });
             }
             if (options.domain !== undefined) {
-                throw new Error(`Cookie "${name}" with __Host- prefix must not have Domain attribute`);
+                throw new CookieSecurePrefixError(name, "with __Host- prefix must not have Domain attribute", {
+                    details: { name, domain: options.domain },
+                });
             }
         }
     }
 
     if (options.sameSite === "none" && options.secure !== true) {
-        throw new Error("SameSite=None requires Secure");
+        throw new SameSiteNoneRequiresSecureError();
     }
 
     const encoded = encodeURIComponent(value);

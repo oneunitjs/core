@@ -1,5 +1,6 @@
 import type { KoaLikeContext, ResponseFrameworkAdapter } from "./types.js";
 import { isBodylessStatus } from "../types.js";
+import { ResponseAlreadySentError } from "../../errors/response.js";
 
 export function createKoaAdapter(ctx: KoaLikeContext): ResponseFrameworkAdapter {
     return {
@@ -7,7 +8,7 @@ export function createKoaAdapter(ctx: KoaLikeContext): ResponseFrameworkAdapter 
 
         send({ status, body, headers }) {
             if (ctx.headerSent) {
-                throw new Error("Response has already been sent");
+                throw new ResponseAlreadySentError();
             }
 
             ctx.status = status;

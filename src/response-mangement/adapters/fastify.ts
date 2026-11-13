@@ -1,5 +1,6 @@
 import type { FastifyLikeReply, ResponseFrameworkAdapter } from "./types.js";
 import { isBodylessStatus } from "../types.js";
+import { ResponseAlreadySentError } from "../../errors/response.js";
 
 export function createFastifyAdapter(reply: FastifyLikeReply): ResponseFrameworkAdapter {
     return {
@@ -7,7 +8,7 @@ export function createFastifyAdapter(reply: FastifyLikeReply): ResponseFramework
 
         send({ status, body, headers }) {
             if (reply.sent) {
-                throw new Error("Response has already been sent");
+                throw new ResponseAlreadySentError();
             }
 
             if (headers) {

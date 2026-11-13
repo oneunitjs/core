@@ -12,6 +12,7 @@ import {
     type ApplicationHookName,
     type LifecycleHookName,
 } from "./default-hooks.js";
+import { HookNotAllowedError } from "../errors/hooks.js";
 
 class HooksImpl<Context = unknown, HookName extends string = string>
     implements Hooks<Context, HookName>
@@ -29,8 +30,9 @@ class HooksImpl<Context = unknown, HookName extends string = string>
 
     private validateHook(name: string): void {
         if (this.allowedHooks && !this.allowedHooks.has(name)) {
-            throw new Error(
-                `Hook "${name}" is not allowed. Allowed hooks: ${Array.from(this.allowedHooks).join(", ")}`,
+            throw new HookNotAllowedError(
+                name,
+                Array.from(this.allowedHooks),
             );
         }
     }
