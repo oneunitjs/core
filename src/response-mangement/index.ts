@@ -64,14 +64,6 @@ export {
     error,
 } from "./registry.js";
 
-// Backward-compatible aliases
-export {
-    createExpressResponseAdapter as createExpressAdapter,
-    createFastifyResponseAdapter as createFastifyAdapter,
-    createKoaResponseAdapter as createKoaAdapter,
-    createHttpResponseAdapter as createHttpAdapter,
-} from "./registry.js";
-
 export type {
     DetectedResponseFramework,
 } from "./registry.js";

@@ -24,7 +24,7 @@ export type {
     FrameworkType,
     FrameworkAdapter,
     AdaptedMiddleware,
-} from "./adapters/types.js";
+} from "../adapters/types.js";
 export {
     DEFAULT_LIFECYCLE_OPTIONS,
     EASY_MODE_DEFAULTS,

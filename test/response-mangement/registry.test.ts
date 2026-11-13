@@ -7,10 +7,10 @@ import {
     SUCCESS_RESPONSES,
     BODYLESS_STATUSES,
     createResponseFrameworkManager,
-    createExpressAdapter,
-    createFastifyAdapter,
-    createKoaAdapter,
-    createHttpAdapter,
+    createExpressResponseAdapter,
+    createFastifyResponseAdapter,
+    createKoaResponseAdapter,
+    createHttpResponseAdapter,
 } from "../../src/response-mangement/index.js";
 
 describe("HTTP_STATUS", () => {
@@ -125,7 +125,7 @@ describe("createResponseFrameworkManager with Express adapter", () => {
             removeHeader: () => {},
         };
 
-        const adapter = createExpressAdapter(res);
+        const adapter = createExpressResponseAdapter(res);
         const manager = new ResponseManager();
         const rfm = createResponseFrameworkManager(manager, adapter);
 
@@ -151,7 +151,7 @@ describe("createResponseFrameworkManager with Express adapter", () => {
             removeHeader: () => {},
         };
 
-        const adapter = createExpressAdapter(res);
+        const adapter = createExpressResponseAdapter(res);
         const manager = new ResponseManager();
         const rfm = createResponseFrameworkManager(manager, adapter);
 
@@ -175,7 +175,7 @@ describe("createResponseFrameworkManager with Express adapter", () => {
             removeHeader: () => {},
         };
 
-        const adapter = createExpressAdapter(res);
+        const adapter = createExpressResponseAdapter(res);
         const manager = new ResponseManager();
         const rfm = createResponseFrameworkManager(manager, adapter);
 
@@ -199,7 +199,7 @@ describe("createResponseFrameworkManager with Fastify adapter", () => {
             removeHeader: () => {},
         };
 
-        const adapter = createFastifyAdapter(reply);
+        const adapter = createFastifyResponseAdapter(reply);
         const manager = new ResponseManager();
         const rfm = createResponseFrameworkManager(manager, adapter);
 
@@ -225,7 +225,7 @@ describe("createResponseFrameworkManager with Koa adapter", () => {
             request: { id: "req-123" },
         };
 
-        const adapter = createKoaAdapter(ctx);
+        const adapter = createKoaResponseAdapter(ctx);
         const manager = new ResponseManager();
         const rfm = createResponseFrameworkManager(manager, adapter);
 
@@ -253,7 +253,7 @@ describe("createResponseFrameworkManager with node:http adapter", () => {
             request: { id: "req-123" },
         };
 
-        const adapter = createHttpAdapter(res);
+        const adapter = createHttpResponseAdapter(res);
         const manager = new ResponseManager();
         const rfm = createResponseFrameworkManager(manager, adapter);
 
@@ -291,7 +291,7 @@ describe("ERROR_RESPONSES and SUCCESS_RESPONSES", () => {
             removeHeader: () => {},
         };
 
-        const adapter = createExpressAdapter(res);
+        const adapter = createExpressResponseAdapter(res);
         const manager = new ResponseManager();
         const rfm = createResponseFrameworkManager(manager, adapter);
 

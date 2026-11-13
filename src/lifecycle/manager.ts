@@ -15,7 +15,7 @@ import {
 } from "./types.js";
 import { MiddlewareRegistry } from "./middleware-registry.js";
 import { PluginSystem } from "./plugin-system.js";
-import type { FrameworkType } from "./adapters/types.js";
+import type { FrameworkType } from "../adapters/types.js";
 
 export class LifecycleManager {
     private mode: LifecycleMode;

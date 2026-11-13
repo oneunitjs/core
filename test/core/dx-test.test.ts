@@ -3,10 +3,10 @@ import { createApp } from "../../src/core/index.js";
 import {
     createResponseFrameworkManager,
     createResponseManager,
-    createExpressAdapter,
-    createFastifyAdapter,
-    createKoaAdapter,
-    createHttpAdapter,
+    createExpressResponseAdapter,
+    createFastifyResponseAdapter,
+    createKoaResponseAdapter,
+    createHttpResponseAdapter,
 } from "../../src/response-mangement/index.js";
 import express from "express";
 import Fastify from "fastify";
@@ -160,7 +160,7 @@ describe("createApp - Unified DX", () => {
             const manager = createResponseManager();
 
             fastify.get("/ok", async (_req, reply) => {
-                const adapter = createFastifyAdapter(reply);
+                const adapter = createFastifyResponseAdapter(reply);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 rfm.ok({ data: { id: 1 }, message: "OK" });
             });
@@ -201,7 +201,7 @@ describe("createApp - Unified DX", () => {
 
             app.use(async (ctx) => {
                 if (ctx.path === "/ok") {
-                    const adapter = createKoaAdapter(ctx);
+                    const adapter = createKoaResponseAdapter(ctx);
                     const rfm = createResponseFrameworkManager(createResponseManager(), adapter);
                     rfm.ok({ message: "Hello from Koa" });
                 }
@@ -251,7 +251,7 @@ describe("createApp - Unified DX", () => {
         beforeAll(async () => {
             const manager = createResponseManager();
             server = http.createServer((req, res) => {
-                const adapter = createHttpAdapter(res);
+                const adapter = createHttpResponseAdapter(res);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 if (req.url === "/ok") {
                     rfm.ok({ message: "HTTP works" });

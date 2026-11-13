@@ -8,6 +8,18 @@
  */
 
 export type FrameworkName = "express" | "fastify" | "koa" | "http";
+export type FrameworkType = FrameworkName;
+
+export interface FrameworkAdapter {
+    framework: FrameworkName;
+    adapt(_middleware: any): any;
+}
+
+export interface AdaptedMiddleware {
+    framework: FrameworkName;
+    _middleware: any;
+    registration: any;
+}
 
 /**
  * Base interface that all adapters must implement.

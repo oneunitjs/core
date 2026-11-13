@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createResponseFrameworkManager, createResponseManager, createExpressAdapter, createFastifyAdapter, createKoaAdapter, createHttpAdapter } from "../../src/response-mangement/index.js";
+import { createResponseFrameworkManager, createResponseManager, createExpressResponseAdapter, createFastifyResponseAdapter, createKoaResponseAdapter, createHttpResponseAdapter } from "../../src/response-mangement/index.js";
 import express from "express";
 import Fastify from "fastify";
 import Koa from "koa";
@@ -19,31 +19,31 @@ describe("Response Management — Real Framework Servers", () => {
             const manager = createResponseManager();
 
             app.get("/ok", (_req, res) => {
-                const adapter = createExpressAdapter(res);
+                const adapter = createExpressResponseAdapter(res);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 rfm.ok({ data: { id: 1 }, message: "Created successfully" });
             });
 
             app.get("/notfound", (_req, res) => {
-                const adapter = createExpressAdapter(res);
+                const adapter = createExpressResponseAdapter(res);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 rfm.notFound({ message: "Resource not found" });
             });
 
             app.post("/created", (_req, res) => {
-                const adapter = createExpressAdapter(res);
+                const adapter = createExpressResponseAdapter(res);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 rfm.created({ message: "Resource created", data: { id: 42 } });
             });
 
             app.get("/badrequest", (_req, res) => {
-                const adapter = createExpressAdapter(res);
+                const adapter = createExpressResponseAdapter(res);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 rfm.badRequest({ message: "Invalid input" });
             });
 
             app.get("/nocontent", (_req, res) => {
-                const adapter = createExpressAdapter(res);
+                const adapter = createExpressResponseAdapter(res);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 rfm.noContent();
             });
@@ -126,25 +126,25 @@ describe("Response Management — Real Framework Servers", () => {
             const manager = createResponseManager();
 
             fastify.get("/ok", async (_req, reply) => {
-                const adapter = createFastifyAdapter(reply);
+                const adapter = createFastifyResponseAdapter(reply);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 rfm.ok({ data: { id: 1 }, message: "OK" });
             });
 
             fastify.get("/notfound", async (_req, reply) => {
-                const adapter = createFastifyAdapter(reply);
+                const adapter = createFastifyResponseAdapter(reply);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 rfm.notFound({ message: "Not found" });
             });
 
             fastify.get("/internalerror", async (_req, reply) => {
-                const adapter = createFastifyAdapter(reply);
+                const adapter = createFastifyResponseAdapter(reply);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 rfm.internalServerError({ message: "Something went wrong" });
             });
 
             fastify.get("/nocontent", async (_req, reply) => {
-                const adapter = createFastifyAdapter(reply);
+                const adapter = createFastifyResponseAdapter(reply);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 rfm.noContent();
             });
@@ -205,7 +205,7 @@ describe("Response Management — Real Framework Servers", () => {
 
             app.use(async (ctx) => {
                 if (ctx.path === path) {
-                    const adapter = createKoaAdapter(ctx);
+                    const adapter = createKoaResponseAdapter(ctx);
                     const rfm = createResponseFrameworkManager(manager, adapter);
                     if (path === "/ok") {
                         rfm.ok({ data: { id: 1 }, message: "OK" });
@@ -278,7 +278,7 @@ describe("Response Management — Real Framework Servers", () => {
             const manager = createResponseManager();
 
             server = http.createServer((req, res) => {
-                const adapter = createHttpAdapter(res);
+                const adapter = createHttpResponseAdapter(res);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 if (req.url === "/ok") {
                     rfm.ok({ data: { id: 1 }, message: "OK" });
@@ -336,7 +336,7 @@ describe("Response Management — Real Framework Servers", () => {
             let testPort: number;
 
             testServer = http.createServer((req, res) => {
-                const adapter = createHttpAdapter(res);
+                const adapter = createHttpResponseAdapter(res);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 if (req.url === "/nocontent") {
                     rfm.noContent();
