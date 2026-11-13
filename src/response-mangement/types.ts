@@ -164,13 +164,17 @@ export interface ResponseManagementOptions {
     defaultSuccessMessage?: string;
     defaultErrorMessage?: string;
     includeRequestId?: boolean;
+    tryCatchEnabled?: boolean;
+    defaultErrorStatusCode?: number;
 }
 
 export type ResponseManagementPluginOptions = ResponseManagementOptions;
 
-export const DEFAULT_RESPONSE_CONFIG: Required<Pick<ResponseManagementOptions, "defaultSuccessMessage" | "defaultErrorMessage">> = {
+export const DEFAULT_RESPONSE_CONFIG: Required<Pick<ResponseManagementOptions, "defaultSuccessMessage" | "defaultErrorMessage" | "tryCatchEnabled" | "defaultErrorStatusCode">> = {
     defaultSuccessMessage: "Success",
     defaultErrorMessage: "Error",
+    tryCatchEnabled: false,
+    defaultErrorStatusCode: 500,
 };
 
 export const ERROR_RESPONSES = {

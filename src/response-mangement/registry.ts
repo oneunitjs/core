@@ -149,22 +149,73 @@ export function createResponseManager(options: ResponseManagementOptions = {}): 
 
 export function createResponseFrameworkManager(
     manager: ResponseManager,
-    adapter: ResponseFrameworkAdapter
+    adapter: ResponseFrameworkAdapter,
+    options: { tryCatchEnabled?: boolean; defaultErrorStatusCode?: number } = {},
 ): ResponseFrameworkManager {
-    return new ResponseFrameworkManager(manager, adapter);
+    return new ResponseFrameworkManager(manager, adapter, options);
 }
 
 export class ResponseFrameworkManager {
     private manager: ResponseManager;
     private adapter: ResponseFrameworkAdapter;
+    private readonly tryCatchEnabled: boolean;
+    private readonly defaultErrorStatusCode: number;
 
-    constructor(manager: ResponseManager, adapter: ResponseFrameworkAdapter) {
+    constructor(
+        manager: ResponseManager,
+        adapter: ResponseFrameworkAdapter,
+        options: { tryCatchEnabled?: boolean; defaultErrorStatusCode?: number } = {},
+    ) {
         this.manager = manager;
         this.adapter = adapter;
+        this.tryCatchEnabled = options.tryCatchEnabled ?? false;
+        this.defaultErrorStatusCode = options.defaultErrorStatusCode ?? 500;
     }
 
     get adapterName(): string {
         return this.adapter.name;
+    }
+
+    /**
+     * Wraps a route handler with try/catch error handling.
+     * When tryCatchEnabled is true, any thrown error is caught and
+     * sent as a standardized error response.
+     *
+     * @param handler - The async route handler to wrap
+     * @returns A wrapped handler function
+     */
+    wrapHandler(
+        handler: (req: unknown, res: unknown, next?: () => void) => void | Promise<void>,
+    ): (req: unknown, res: unknown, next?: () => void) => void | Promise<void> {
+        if (!this.tryCatchEnabled) {
+            return handler;
+        }
+
+        return async (req: unknown, res: unknown, next?: () => void) => {
+            try {
+                await handler(req, res, next);
+            } catch (err: any) {
+                const message = err?.message ?? "Internal Server Error";
+
+                this.manager.error({
+                    status: this.defaultErrorStatusCode,
+                    message,
+                });
+
+                this.adapter.send({
+                    status: this.defaultErrorStatusCode,
+                    body: this.manager.error({
+                        status: this.defaultErrorStatusCode,
+                        message,
+                    }),
+                    headers: { "content-type": "application/json" },
+                });
+
+                if (next) {
+                    next();
+                }
+            }
+        };
     }
 
     private sendEnvelope(
@@ -371,41 +422,46 @@ function hasEnvelopeContent(obj: Record<string, unknown>): boolean {
 export function respondTo<T = unknown>(
     manager: ResponseManager,
     adapter: ResponseFrameworkAdapter,
-    options: RespondOptions<T>
+    options: RespondOptions<T>,
+    rfmOptions?: { tryCatchEnabled?: boolean; defaultErrorStatusCode?: number },
 ): void {
-    createResponseFrameworkManager(manager, adapter).respond(options);
+    createResponseFrameworkManager(manager, adapter, rfmOptions).respond(options);
 }
 
 export function ok<T = unknown>(
     manager: ResponseManager,
     adapter: ResponseFrameworkAdapter,
-    options: SuccessOptions<T> = {}
+    options: SuccessOptions<T> = {},
+    rfmOptions?: { tryCatchEnabled?: boolean; defaultErrorStatusCode?: number },
 ): void {
-    createResponseFrameworkManager(manager, adapter).ok(options);
+    createResponseFrameworkManager(manager, adapter, rfmOptions).ok(options);
 }
 
 export function created<T = unknown>(
     manager: ResponseManager,
     adapter: ResponseFrameworkAdapter,
-    options: SuccessOptions<T> = {}
+    options: SuccessOptions<T> = {},
+    rfmOptions?: { tryCatchEnabled?: boolean; defaultErrorStatusCode?: number },
 ): void {
-    createResponseFrameworkManager(manager, adapter).created(options);
+    createResponseFrameworkManager(manager, adapter, rfmOptions).created(options);
 }
 
 export function notFound<T = unknown>(
     manager: ResponseManager,
     adapter: ResponseFrameworkAdapter,
-    options: ErrorOptions<T> = {}
+    options: ErrorOptions<T> = {},
+    rfmOptions?: { tryCatchEnabled?: boolean; defaultErrorStatusCode?: number },
 ): void {
-    createResponseFrameworkManager(manager, adapter).notFound(options);
+    createResponseFrameworkManager(manager, adapter, rfmOptions).notFound(options);
 }
 
 export function error(
     manager: ResponseManager,
     adapter: ResponseFrameworkAdapter,
-    options: ErrorResponseOptions
+    options: ErrorResponseOptions,
+    rfmOptions?: { tryCatchEnabled?: boolean; defaultErrorStatusCode?: number },
 ): void {
-    createResponseFrameworkManager(manager, adapter).error(options);
+    createResponseFrameworkManager(manager, adapter, rfmOptions).error(options);
 }
 
 export type {

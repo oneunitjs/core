@@ -64,6 +64,13 @@ export {
     error,
 } from "./registry.js";
 
+export {
+    withTryCatch,
+    createTryCatchMiddleware,
+    withTryCatchConditional,
+    type TryCatchOptions,
+} from "./trycatch.js";
+
 export type {
     DetectedResponseFramework,
 } from "./registry.js";
