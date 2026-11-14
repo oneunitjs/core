@@ -6,7 +6,7 @@ import {
     envNumber,
     envString,
 } from "./env.js";
-import type { CreateConfigOptions, Config, ServiceConfig } from "./type.js";
+import type { CreateConfigOptions, Config, ServiceConfig } from "./types.js";
 
 export function createConfig(options: CreateConfigOptions = {}): Config {
     const environment = resolveNodeEnv(options.nodeEnv);

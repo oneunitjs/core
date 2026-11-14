@@ -1,6 +1,6 @@
 import path from "node:path";
 import { envFile } from "./env.js";
-import type { LoadEnvOptions, DotenvConfig } from "./type.js";
+import type { LoadEnvOptions, DotenvConfig } from "./types.js";
 
 export async function loadEnv(options: LoadEnvOptions = {}): Promise<void> {
     let dotenv: DotenvConfig;
