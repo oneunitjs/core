@@ -38,6 +38,10 @@ export function parseMultipart(
             headers: effectiveHeaders,
             limits: {
                 headerPairs: merged.headersLimit ?? 2000,
+                fieldSize: merged.maxFieldsSize,
+                fileSize: merged.maxFileSize,
+                fields: merged.maxFields,
+                files: merged.maxFiles,
             },
         });
 

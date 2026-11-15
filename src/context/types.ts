@@ -5,60 +5,73 @@
  * AsyncLocalStorage to provide request-scoped storage.
  */
 
-export interface RequestContextOptions {
+export type TimestampFormat = "iso" | "unix" | "unix-ms";
+
+export interface RequestContextOptions<T extends object = Record<string, unknown>> {
+
     /** Initial values to set in the context when created */
-    initialValues?: Record<string, unknown>;
+    initialValues?: Partial<T>;
+
     /** Automatically add a timestamp to each run() call (default: false) */
     autoTimestamp?: boolean;
+
     /** Key name for the timestamp value (default: "timestamp") */
     timestampKey?: string;
+
     /** Format for the timestamp value (default: "iso") */
-    timestampFormat?: "iso" | "unix" | "unix-ms";
+    timestampFormat?: TimestampFormat;
 }
 
-export interface RequestContext {
+export interface RequestContext<T extends object = Record<string, unknown>> {
+
     /**
      * Get a value from the current request context.
      * Returns undefined if no context is active or the key doesn't exist.
      */
-    get<T = unknown>(key: string): T | undefined;
+    get<K extends keyof T>(key: K): T[K] | undefined;
 
     /**
      * Set a value in the current request context.
-     * Returns true if the value was set successfully (i.e., we're inside a context).
+     * Returns true if the value was stored, false when no context is active.
      */
-    set(key: string, value: unknown): boolean;
+    set<K extends keyof T>(key: K, value: T[K]): boolean;
 
     /**
-     * Delete a value from the current request context.
-     * Returns true if the key existed and was removed.
+     * Remove one key from the current context.
+     * Returns false when no context is active.
      */
-    delete(key: string): boolean;
+    delete(key: keyof T): boolean;
 
     /**
-     * Check if a key exists in the current context.
+     * Check whether a key exists in the current context.
+     * Returns false when no context is active.
      */
-    has(key: string): boolean;
+    has(key: keyof T): boolean;
 
     /**
-     * Get all current context values as a plain object.
+     * Get all current context values as a plain object snapshot.
      * Returns an empty object if no context is active.
      */
-    getAll(): Record<string, unknown>;
+    getAll(): Partial<T>;
 
     /**
-     * Clear all values from the current context.
+     * Clear every key from the current context.
+     * No operation when no context is active.
      */
     clear(): void;
 
     /**
-     * Check if we're currently inside a request context.
+     * Determine whether a context store is available in the current
+     * execution chain.
      */
     isActive(): boolean;
 
     /**
-     * Run a function within this context with initial values.
-     * Values are available via `get()` during execution.
+     * Run a function within an isolated context boundary.
+     * Returns a Promise containing the function's result.
      */
-    run<R = unknown>(fn: () => R | Promise<R>, values?: Record<string, unknown>): Promise<R>;
+    run<R>(
+        fn: () => R | Promise<R>,
+        values?: Partial<T>
+    ): Promise<R>;
 }

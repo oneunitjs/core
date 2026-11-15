@@ -201,69 +201,20 @@ export class MiddlewareRegistry {
             };
         }
 
-        let aborted = false;
-        let nextCalled = false;
-        const originalNext = ctx.next;
-        const wrappedNext = () => {
-            nextCalled = true;
-            originalNext();
-        };
-
-        // Wrap res.setHeader to track headers if trackHeaders is configured
-        const res = ctx.res as any;
-        const originalSetHeader = res?.setHeader;
-        const setHeaders: string[] = [];
-
-        if (reg.trackHeaders && typeof originalSetHeader === "function") {
-            res.setHeader = (key: string, value: any) => {
-                setHeaders.push(key.toLowerCase());
-                return originalSetHeader.call(res, key, value);
-            };
-        }
-
-        let timeoutId: NodeJS.Timeout | null = null;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutId = setTimeout(() => {
-                reject(new Error(`Middleware "${name}" timed out`));
-            }, this.executionTimeoutMs);
-        });
-
         try {
-            await Promise.race([
-                (async () => {
-                    await reg.middleware(ctx.req, ctx.res, wrappedNext);
-                })(),
-                timeoutPromise,
-            ]);
+            await reg.middleware(ctx.req, ctx.res, ctx.next);
         } catch (err) {
-            clearTimeout(timeoutId!);
-            // Restore original setHeader
-            if (reg.trackHeaders && typeof originalSetHeader === "function") {
-                res.setHeader = originalSetHeader;
-            }
             return {
                 success: false,
-                aborted,
+                aborted: false,
                 error: err instanceof Error ? err : new Error(String(err)),
                 durationMs: Date.now() - start,
             };
         }
 
-        clearTimeout(timeoutId!);
-
-        // Restore original setHeader
-        if (reg.trackHeaders && typeof originalSetHeader === "function") {
-            res.setHeader = originalSetHeader;
-        }
-
-        // If middleware didn't call next(), treat as aborting the chain
-        if (!nextCalled) {
-            aborted = true;
-        }
-
         return {
             success: true,
-            aborted,
+            aborted: false,
             durationMs: Date.now() - start,
         };
     }

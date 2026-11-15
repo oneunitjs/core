@@ -86,7 +86,7 @@ import type {
 } from "./security/types.js";
 import type {
     CreateConfigOptions,
-} from "./config/type.js";
+} from "./config/types.js";
 import type {
     MultipartOptions,
 } from "./multipart/types.js";
@@ -539,24 +539,12 @@ export function createApp(options?: AppOptions): App {
         return buildCookieAPI(store);
     }
 
-    let api: CookieStoreAPI;
+    let api: CookieStoreAPI = buildCookieAPI(createCookieStore(cookieConfig));
 
     const cookieStoreAPI = (req?: unknown, res?: unknown): CookieStoreAPI => {
         if (req && res) {
-            cachedCookieReqRes = { req, res };
-            cachedCookieStore = createDetectedCookieStore(req, res, undefined, cookieConfig);
-            api = buildCookieAPI(cachedCookieStore);
-            return api;
+            return buildCookieAPI(createDetectedCookieStore(req, res, undefined, cookieConfig));
         }
-
-        if (cachedCookieStore && cachedCookieReqRes) {
-            api = buildCookieAPI(cachedCookieStore);
-            return api;
-        }
-
-        cachedCookieStore = createCookieStore(cookieConfig) as ReturnType<typeof createDetectedCookieStore>;
-        cachedCookieReqRes = { req: undefined, res: undefined };
-        api = buildCookieAPI(cachedCookieStore);
         return api;
     };
 

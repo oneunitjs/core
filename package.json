@@ -8,6 +8,30 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./context": {
+      "types": "./dist/context/index.d.ts",
+      "default": "./dist/context/index.js"
+    },
+    "./config": {
+      "types": "./dist/config/index.d.ts",
+      "default": "./dist/config/index.js"
+    },
+    "./cookie": {
+      "types": "./dist/cookie/index.d.ts",
+      "default": "./dist/cookie/index.js"
+    },
+    "./health": {
+      "types": "./dist/health/index.d.ts",
+      "default": "./dist/health/index.js"
+    },
+    "./security": {
+      "types": "./dist/security/index.d.ts",
+      "default": "./dist/security/index.js"
+    },
+    "./errors": {
+      "types": "./dist/errors/index.d.ts",
+      "default": "./dist/errors/index.js"
     }
   },
   "scripts": {
@@ -18,6 +42,9 @@
   "keywords": [],
   "author": "",
   "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "type": "module",
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",
@@ -33,6 +60,7 @@
     "rate-limiter-flexible": "^11.4.1",
     "sanitize-html": "^2.18.2",
     "swagger-ui-dist": "^5.34.1",
+    "yaml": "^2.9.1",
     "zod": "^4.6.7"
   },
   "optionalDependencies": {

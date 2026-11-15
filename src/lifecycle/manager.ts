@@ -171,7 +171,7 @@ export class LifecycleManager {
     async executeMiddlewareChain(
         req: unknown,
         res: unknown,
-        _phase: "request" | "response" | "error" = "request",
+        phase: "request" | "response" | "error" = "request",
     ): Promise<MiddlewareResult[]> {
         this.executionCount++;
 
@@ -179,7 +179,7 @@ export class LifecycleManager {
             req,
             res,
             next: () => {},
-            phase: "request",
+            phase,
             abort: () => { ctx.aborted = true; },
             aborted: false,
         };
@@ -267,36 +267,28 @@ export class LifecycleManager {
 
         // Create a combined middleware that runs all registered middleware in order
         return async (req: any, res: any, next?: any) => {
-            let chainAborted = false;
             const ctx: MiddlewareContext = {
                 req,
                 res,
-                next: () => { chainAborted = true; },
+                next: () => {},
                 phase: "request",
-                abort: () => { chainAborted = true; },
+                abort: () => {},
                 aborted: false,
             };
 
             for (const reg of registrations) {
-                if (chainAborted) break;
-
                 const result = await this.middleware.execute(reg.name, {
                     ...ctx,
                     phase: ctx.phase,
                 });
 
-                if (!result.success && !result.aborted) {
-                    continue;
-                }
-
-                if (result.aborted) {
-                    chainAborted = true;
+                if (!result.success) {
                     break;
                 }
             }
 
             // If using Express-style next, call it unless aborted
-            if (next && !chainAborted) {
+            if (next && !ctx.aborted) {
                 next();
             }
         };

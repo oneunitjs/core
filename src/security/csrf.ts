@@ -1,6 +1,44 @@
+/**
+ * @oneunit/core - CSRF Protection
+ *
+ * Implements CSRF (Cross-Site Request Forgery) protection using the
+ * double-submit cookie pattern. A cryptographically random token is
+ * stored in a cookie, and the same token must be submitted via a custom
+ * header or request body parameter. Since cookies are automatically sent by
+ * browsers but custom headers/body cannot be read by cross-origin JavaScript,
+ * this prevents CSRF attacks.
+ *
+ * ```ts
+ * import { createCsrf } from "@oneunit/core";
+ *
+ * const csrf = createCsrf({
+ *   cookieName: "_csrf",
+ *   headerName: "X-CSRF-Token",
+ *   ignoreMethods: ["GET", "HEAD", "OPTIONS"],
+ * });
+ *
+ * // Express middleware
+ * app.use(csrf.middleware());
+ * ```
+ */
+
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { CsrfOptions } from "./types.js";
 export type { CsrfOptions };
+
+export interface CsrfMiddleware {
+    name: string;
+    enabled: boolean;
+    options: CsrfOptions;
+    enable(): void;
+    disable(): void;
+    toggle(): void;
+    generateToken(): string;
+    validateToken(token: string, cookieToken?: string): boolean;
+    getTokenFromRequest(req: unknown): string | undefined;
+    middleware(): (req: unknown, res: unknown, next?: () => void) => void;
+    middlewareWithToken(): (req: unknown, res: unknown, next?: () => void) => void;
+}
 
 const DEFAULT_CSRF_OPTIONS: CsrfOptions = {
     cookieName: "_csrf",
@@ -14,71 +52,51 @@ const DEFAULT_CSRF_OPTIONS: CsrfOptions = {
     },
 };
 
-export interface CsrfMiddleware {
-    name: string;
-    enabled: boolean;
-    options: CsrfOptions;
-    enable(): void;
-    disable(): void;
-    toggle(): void;
-    generateToken(): string;
-    validateToken(token: string): boolean;
-    getTokenFromRequest(req: unknown): string | undefined;
-    middleware(): (req: unknown, res: unknown, next?: () => void) => void;
-    middlewareWithToken(): (req: unknown, res: unknown, next?: () => void) => void;
+function constantTimeCompare(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
-function generateToken(length: number = 32): string {
-    return randomBytes(length).toString("hex");
-}
-
+/**
+ * Creates a CSRF middleware using the double-submit cookie pattern.
+ *
+ * A cryptographically random token is stored in a cookie, and the same
+ * token must be submitted via a custom header or request body parameter.
+ * Since cookies are automatically sent by browsers but custom headers
+ * cannot be read by cross-origin JavaScript, this prevents CSRF attacks.
+ *
+ * @param options - CSRF configuration options
+ * @returns A CsrfMiddleware instance
+ *
+ * @example
+ * ```ts
+ * const csrf = createCsrf({
+ *   cookieName: "_csrf",
+ *   headerName: "X-CSRF-Token",
+ *   ignoreMethods: ["GET", "HEAD", "OPTIONS"],
+ *   cookieOptions: {
+ *     path: "/",
+ *     sameSite: "lax",
+ *     httpOnly: true,
+ *     secure: true,
+ *   },
+ * });
+ *
+ * app.use(csrf.middleware());
+ * ```
+ */
 export function createCsrf(options: CsrfOptions = {}): CsrfMiddleware {
     const merged: CsrfOptions = {
-        secret: options.secret ?? generateToken(32),
         cookieName: options.cookieName ?? DEFAULT_CSRF_OPTIONS.cookieName,
         headerName: options.headerName ?? DEFAULT_CSRF_OPTIONS.headerName,
+        ignoreMethods: options.ignoreMethods ?? DEFAULT_CSRF_OPTIONS.ignoreMethods,
         cookieOptions: {
             ...DEFAULT_CSRF_OPTIONS.cookieOptions,
             ...options.cookieOptions,
         },
-        ignoreMethods: options.ignoreMethods ?? DEFAULT_CSRF_OPTIONS.ignoreMethods,
     };
 
     let enabled = true;
-    const tokens = new Map<string, { value: string; createdAt: number }>();
-    const TOKEN_TTL_MS = 10 * 60 * 1000;
-
-    function generateTokenFn(): string {
-        const token = generateToken();
-        tokens.set(token, { value: token, createdAt: Date.now() });
-        cleanupTokens();
-        return token;
-    }
-
-    function cleanupTokens(): void {
-        const now = Date.now();
-        for (const [key, entry] of tokens) {
-            if (now - entry.createdAt > TOKEN_TTL_MS) {
-                tokens.delete(key);
-            }
-        }
-    }
-
-    function constantTimeCompare(a: string, b: string): boolean {
-        if (a.length !== b.length) return false;
-        return timingSafeEqual(Buffer.from(a), Buffer.from(b));
-    }
-
-    function validateToken(tokenToValidate: string): boolean {
-        if (!tokenToValidate) return false;
-        const entry = tokens.get(tokenToValidate);
-        if (!entry) return false;
-        if (Date.now() - entry.createdAt > TOKEN_TTL_MS) {
-            tokens.delete(tokenToValidate);
-            return false;
-        }
-        return constantTimeCompare(tokenToValidate, entry.value);
-    }
 
     function getTokenFromRequest(req: unknown): string | undefined {
         const headers = (req as any)?.headers;
@@ -136,66 +154,82 @@ export function createCsrf(options: CsrfOptions = {}): CsrfMiddleware {
         }
     }
 
-    function middleware(): (req: any, res: any, next?: () => void) => void {
-        return (req: any, res: any, next?: () => void) => {
-            if (!enabled) {
-                if (next) next();
-                return;
-            }
-
-            const method = req?.method;
-            if (merged.ignoreMethods && merged.ignoreMethods.includes(method ?? "")) {
-                if (next) next();
-                return;
-            }
-
-            const token = getTokenFromRequest(req);
-            if (!token || !validateToken(token)) {
-                sendCsrfError(res);
-                return;
-            }
-
-            if (next) next();
-        };
-    }
-
-    function middlewareWithToken(): (req: any, res: any, next?: () => void) => void {
-        return (req: any, res: any, next?: () => void) => {
-            if (!enabled) {
-                if (next) next();
-                return;
-            }
-
-            const method = req?.method;
-            if (merged.ignoreMethods && merged.ignoreMethods.includes(method ?? "")) {
-                if (next) next();
-                return;
-            }
-
-            const token = getTokenFromRequest(req);
-            const cookieToken = getTokenCookie(req);
-
-            if (!token || !cookieToken || !validateToken(token) || !constantTimeCompare(token, cookieToken)) {
-                sendCsrfError(res);
-                return;
-            }
-
-            setTokenCookie(res, cookieToken);
-            if (next) next();
-        };
+    function validateToken(token: string, cookieToken?: string): boolean {
+        if (!token) return false;
+        if (!cookieToken) return false;
+        return constantTimeCompare(token, cookieToken);
     }
 
     return {
         name: "csrf",
-        get enabled() { return enabled; },
-        get options() { return { ...merged }; },
-        enable() { enabled = true; },
-        disable() { enabled = false; },
-        toggle() { enabled = !enabled; },
-        generateToken: generateTokenFn,
+        get enabled() {
+            return enabled;
+        },
+        get options() {
+            return { ...merged };
+        },
+        enable() {
+            enabled = true;
+        },
+        disable() {
+            enabled = false;
+        },
+        toggle() {
+            enabled = !enabled;
+        },
+        generateToken(): string {
+            return randomBytes(32).toString("hex");
+        },
         validateToken,
         getTokenFromRequest,
-        middleware,
-        middlewareWithToken,
+        middleware(): (req: unknown, res: any, next?: () => void) => void {
+            return (req: any, res: any, next?: () => void) => {
+                if (!enabled) {
+                    if (next) next();
+                    return;
+                }
+
+                const method = req?.method;
+                if (merged.ignoreMethods && merged.ignoreMethods.includes(method ?? "")) {
+                    if (next) next();
+                    return;
+                }
+
+                const token = getTokenFromRequest(req);
+                const cookieToken = getTokenCookie(req);
+
+                if (!token || !cookieToken || !validateToken(token, cookieToken)) {
+                    sendCsrfError(res);
+                    return;
+                }
+
+                if (next) next();
+            };
+        },
+        middlewareWithToken(): (req: unknown, res: any, next?: () => void) => void {
+            return (req: any, res: any, next?: () => void) => {
+                if (!enabled) {
+                    if (next) next();
+                    return;
+                }
+
+                const method = req?.method;
+                if (merged.ignoreMethods && merged.ignoreMethods.includes(method ?? "")) {
+                    if (next) next();
+                    return;
+                }
+
+                const token = getTokenFromRequest(req);
+                const cookieToken = getTokenCookie(req);
+
+                if (!token || !cookieToken || !validateToken(token, cookieToken)) {
+                    sendCsrfError(res);
+                    return;
+                }
+
+                setTokenCookie(res, cookieToken);
+                if (next) next();
+            };
+        },
     };
 }

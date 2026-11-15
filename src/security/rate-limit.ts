@@ -20,6 +20,8 @@
 
 import type { RateLimitMiddleware, RateLimitOptions, RateLimitInfo } from "./types.js";
 
+export type { RateLimitMiddleware, RateLimitOptions };
+
 const DEFAULT_WINDOW_MS = 60 * 1000; // 1 minute
 const DEFAULT_MAX_REQUESTS = 100;
 const DEFAULT_STATUS_CODE = 429;

@@ -24,7 +24,7 @@ describe("CSRF - Token Validation", () => {
     it("should validate a valid token", () => {
         const csrf = createCsrf();
         const token = csrf.generateToken();
-        expect(csrf.validateToken(token)).toBe(true);
+        expect(csrf.validateToken(token, token)).toBe(true);
     });
 
     it("should reject empty token", () => {
@@ -112,7 +112,7 @@ describe("CSRF - Middleware Protection", () => {
         const token = csrf.generateToken();
         const middleware = csrf.middleware();
         const res: any = { statusCode: 200, setHeader: () => {}, end: () => {} };
-        const req: any = { method: "POST", headers: { "x-csrf-token": token } };
+        const req: any = { method: "POST", headers: { "x-csrf-token": token, cookie: `_csrf=${token}` } };
         middleware(req, res);
         expect(res.statusCode).toBe(200);
     });
