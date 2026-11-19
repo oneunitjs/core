@@ -91,7 +91,11 @@ export class AdapterRegistry {
         const entry = this.adapters.get(key);
         if (!entry) return false;
 
-        entry.adapter.dispose();
+        try {
+            entry.adapter.dispose();
+        } catch {
+            // dispose failed; still remove the adapter from the registry
+        }
         return this.adapters.delete(key);
     }
 

@@ -21,10 +21,10 @@ export type MsgPackOptions = {
 }
 
 export interface MsgPack {
-    encode(value: unknown): Uint8Array;
-    decode<T = unknown>(data: Uint8Array | ArrayBuffer): T;
-    encodeSync(value: unknown): Uint8Array;
-    decodeSync<T = unknown>(data: Uint8Array | ArrayBuffer): T;
+    encode(value: unknown, options?: MsgPackOptions): Uint8Array;
+    decode<T = unknown>(data: Uint8Array | ArrayBuffer, options?: MsgPackOptions): T;
+    encodeSync(value: unknown, options?: MsgPackOptions): Uint8Array;
+    decodeSync<T = unknown>(data: Uint8Array | ArrayBuffer, options?: MsgPackOptions): T;
 }
 
 export interface MsgPackConfig {

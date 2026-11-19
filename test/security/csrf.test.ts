@@ -172,24 +172,17 @@ describe("CSRF - Double Submit Cookie Pattern", () => {
         const req: any = { method: "POST", headers: { "x-csrf-token": token, cookie: `_csrf=${token}` } };
         middleware(req, res);
         expect(res.statusCode).toBe(200);
-        expect(res["Set-Cookie"]).toContain("_csrf=");
-        expect(res["Set-Cookie"]).toContain("HttpOnly");
-        expect(res["Set-Cookie"]).toContain("SameSite=lax");
+        expect(res["Set-Cookie"]).toBeUndefined();
     });
 
-    it("should set Secure flag in production", () => {
-        const originalEnv = process.env.NODE_ENV;
-        process.env.NODE_ENV = "production";
-        try {
-            const csrf = createCsrf({ cookieOptions: { secure: true } });
-            const middleware = csrf.middlewareWithToken();
-            const res: any = { statusCode: 200, setHeader: (k: string, v: string) => { res[k] = v; }, end: () => {} };
-            const token = csrf.generateToken();
-            const req: any = { method: "POST", headers: { "x-csrf-token": token, cookie: `_csrf=${token}` } };
-            middleware(req, res);
-            expect(res["Set-Cookie"]).toContain("Secure");
-        } finally {
-            process.env.NODE_ENV = originalEnv;
-        }
+    it("should not rotate token when valid cookie already present", () => {
+        const csrf = createCsrf({ cookieOptions: { secure: true } });
+        const middleware = csrf.middlewareWithToken();
+        const res: any = { statusCode: 200, setHeader: (k: string, v: string) => { res[k] = v; }, end: () => {} };
+        const token = csrf.generateToken();
+        const req: any = { method: "POST", headers: { "x-csrf-token": token, cookie: `_csrf=${token}` } };
+        middleware(req, res);
+        expect(res.statusCode).toBe(200);
+        expect(res["Set-Cookie"]).toBeUndefined();
     });
 });

@@ -84,6 +84,11 @@ export class KoaCookieAdapter extends BaseCookieAdapter {
         const koaOptions: Record<string, unknown> = {};
         if (options?.path) koaOptions.path = options.path;
         if (options?.domain) koaOptions.domain = options.domain;
+
+        const isSecurePrefixed =
+            name.startsWith("__Secure-") || name.startsWith("__Host-");
+        if (isSecurePrefixed) koaOptions.secure = true;
+
         (this.response as {
             cookies: {
                 set(name: string, value: string, options?: Record<string, unknown>): void;

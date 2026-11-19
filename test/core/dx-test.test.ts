@@ -344,37 +344,76 @@ describe("createApp - Unified DX", () => {
                 });
             });
 
+            // Route that issues a CSRF cookie (double-submit pattern: cookie token
+            // must be paired with a matching header/body/query token).
+            app.get("/csrf-cookie", (req, res) => {
+                const token = csrf.generateToken();
+                res.setHeader(
+                    "Set-Cookie",
+                    `_csrf=${token}; Path=/; HttpOnly; SameSite=lax`,
+                );
+                res.end();
+            });
+
             const testServer = http.createServer(app);
             await new Promise<void>((resolve) => testServer.listen(0, resolve));
             const p = (testServer.address() as any).port;
 
+            const request = (
+                opts: { hostname: string; port: number; path: string; method: string; headers?: Record<string, string> },
+                body?: string,
+            ): Promise<{ statusCode: number; headers: http.IncomingHttpHeaders }> =>
+                new Promise((resolve, reject) => {
+                    const req = http.request(
+                        { ...opts, headers: opts.headers },
+                        (res) => {
+                            const chunks: Buffer[] = [];
+                            res.on("data", (c) => chunks.push(c));
+                            res.on("end", () =>
+                                resolve({
+                                    statusCode: res.statusCode ?? 0,
+                                    headers: res.headers,
+                                }),
+                            );
+                        },
+                    );
+                    req.on("error", reject);
+                    req.end(body ?? "");
+                });
+
             // Without token - should fail
-            const res1 = await new Promise<{ statusCode: number }>((resolve, reject) => {
-                const req = http.request(
-                    { hostname: "127.0.0.1", port: p, path: "/submit", method: "POST" },
-                    (res) => resolve({ statusCode: res.statusCode ?? 0 }),
-                );
-                req.on("error", reject);
-                req.end(JSON.stringify({ data: "test" }));
-            });
+            const res1 = await request(
+                { hostname: "127.0.0.1", port: p, path: "/submit", method: "POST" },
+                JSON.stringify({ data: "test" }),
+            );
             expect(res1.statusCode).toBe(403);
 
-            // With token - should pass
-            const token = csrf.generateToken();
-            const res2 = await new Promise<{ statusCode: number }>((resolve, reject) => {
-                const req = http.request(
-                    {
-                        hostname: "127.0.0.1",
-                        port: p,
-                        path: "/submit",
-                        method: "POST",
-                        headers: { "x-csrf-token": token },
-                    },
-                    (res) => resolve({ statusCode: res.statusCode ?? 0 }),
-                );
-                req.on("error", reject);
-                req.end(JSON.stringify({ data: "test" }));
+            // Issue a CSRF cookie, then submit with matching cookie + header token
+            const cookieRes = await request({
+                hostname: "127.0.0.1",
+                port: p,
+                path: "/csrf-cookie",
+                method: "GET",
             });
+            const setCookie = cookieRes.headers["set-cookie"];
+            const cookieValue = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+            const cookieMatch = (cookieValue as string).match(/^_csrf=([^;]+)/);
+            expect(cookieMatch).toBeTruthy();
+            const cookieToken = cookieMatch![1];
+
+            const res2 = await request(
+                {
+                    hostname: "127.0.0.1",
+                    port: p,
+                    path: "/submit",
+                    method: "POST",
+                    headers: {
+                        "x-csrf-token": cookieToken,
+                        cookie: `_csrf=${cookieToken}`,
+                    },
+                },
+                JSON.stringify({ data: "test" }),
+            );
             expect(res2.statusCode).toBe(200);
 
             await new Promise<void>((resolve) => testServer.close(resolve));

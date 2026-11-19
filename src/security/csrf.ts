@@ -227,7 +227,11 @@ export function createCsrf(options: CsrfOptions = {}): CsrfMiddleware {
                     return;
                 }
 
-                setTokenCookie(res, cookieToken);
+                // Only set a new cookie token when no existing valid cookie
+                // token was present; do not rotate the token on every request.
+                if (!cookieToken) {
+                    setTokenCookie(res, cookieToken);
+                }
                 if (next) next();
             };
         },

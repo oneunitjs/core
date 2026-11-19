@@ -18,6 +18,7 @@ export function createMultipart(options: MultipartOptions = {}): MultipartMiddle
         fileFilter: options.fileFilter,
         tmpdir: options.tmpdir,
         headersLimit: options.headersLimit,
+        timeoutMs: options.timeoutMs,
     };
 
     let enabled = true;

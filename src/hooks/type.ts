@@ -12,6 +12,7 @@ export interface Hooks<Context = unknown, HookName extends string = string> {
     once(name: HookName, listener: HookListener<Context>): Hooks<Context, HookName>;
     emit(name: HookName, context: Context): Promise<void>;
     emitSync(name: HookName, context: Context): void;
+    getErrors(): Error[];
     has(name: HookName): boolean;
     listeners(name: HookName): HookListener<Context>[];
     listenerCount(name: HookName): number;

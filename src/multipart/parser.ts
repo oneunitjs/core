@@ -1,4 +1,9 @@
 import Busboy from "busboy";
+import {
+    MultipartFileTooLargeError,
+    MultipartTooManyFilesError,
+    MultipartTooManyFieldsError,
+} from "../errors/multipart.js";
 import type {
     MultipartOptions,
     MultipartResult,
@@ -12,6 +17,7 @@ const DEFAULT_OPTIONS: Required<Omit<MultipartOptions, "fileFilter" | "uploadDir
     maxFiles: 10,
     maxFields: 20,
     allowedMimeTypes: [],
+    timeoutMs: 10000,
 };
 
 export function parseMultipart(
@@ -29,6 +35,7 @@ export function parseMultipart(
         fileFilter: options.fileFilter,
         tmpdir: options.tmpdir,
         headersLimit: options.headersLimit,
+        timeoutMs: options.timeoutMs ?? 10000,
     };
 
     const effectiveHeaders = headers ?? (req as any)?.headers;
@@ -130,6 +137,15 @@ export function parseMultipart(
                 cleanup();
                 reject(err);
             });
+
+            fileStream.on("limit", () => {
+                if (errored) return;
+                fileTooLarge = true;
+                errored = true;
+                cleanup();
+                fileStream.resume();
+                reject(new MultipartFileTooLargeError(merged.maxFileSize));
+            });
         });
 
         busboy.on("field", (fieldname: string, value: string) => {
@@ -143,6 +159,33 @@ export function parseMultipart(
                 return;
             }
             fields.push({ fieldname, value });
+        });
+
+        busboy.on("limit", (field: string) => {
+            if (errored) return;
+            errored = true;
+            cleanup();
+            if (field === "fileSize") {
+                reject(new MultipartFileTooLargeError(merged.maxFileSize));
+            } else if (field === "files") {
+                reject(new MultipartTooManyFilesError(merged.maxFiles));
+            } else if (field === "fields") {
+                reject(new MultipartTooManyFieldsError(merged.maxFields));
+            }
+        });
+
+        busboy.on("filesLimit", () => {
+            if (errored) return;
+            errored = true;
+            cleanup();
+            reject(new MultipartTooManyFilesError(merged.maxFiles));
+        });
+
+        busboy.on("fieldsLimit", () => {
+            if (errored) return;
+            errored = true;
+            cleanup();
+            reject(new MultipartTooManyFieldsError(merged.maxFields));
         });
 
         busboy.on("finish", () => {
@@ -164,10 +207,27 @@ export function parseMultipart(
                 cleanup();
                 reject(new Error("Multipart parse timeout"));
             }
-        }, 10000);
+        }, merged.timeoutMs);
 
         busboy.on("finish", () => clearTimeout(timeout));
         busboy.on("error", () => clearTimeout(timeout));
+
+        // Request abort handling
+        const reqAny = req as any;
+        const onAbort = () => {
+            if (finished || errored) return;
+            errored = true;
+            cleanup();
+            clearTimeout(timeout);
+            reject(new Error("Request aborted"));
+        };
+
+        if (reqAny?.aborted) {
+            onAbort();
+        } else {
+            reqAny?.on?.("close", onAbort);
+            reqAny?.on?.("abort", onAbort);
+        }
 
         (req as any)?.pipe?.(busboy);
     });

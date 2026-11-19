@@ -43,6 +43,14 @@ export class LifecycleManager {
     }
 
     setMode(_mode: LifecycleMode): { success: boolean; conflicts: ConflictInfo[]; error?: string } {
+        if (!["easy", "advanced", "strict"].includes(_mode)) {
+            return {
+                success: false,
+                conflicts: [],
+                error: `Invalid mode "${_mode}". Allowed modes: easy, advanced, strict`,
+            };
+        }
+
         if (this.initialized && _mode !== this.mode) {
             this.mode = _mode;
 
@@ -71,7 +79,7 @@ export class LifecycleManager {
 
     initialize(): { success: boolean; conflicts: ConflictInfo[]; error?: string } {
         if (this.initialized) {
-            return { success: true, conflicts: [], error: "Already initialized" };
+            return { success: false, conflicts: [], error: "Already initialized" };
         }
 
         this.initialized = true;
@@ -153,7 +161,7 @@ export class LifecycleManager {
         const ctx: MiddlewareContext = {
             req,
             res,
-            next: () => { ctx.aborted = true; },
+            next: () => {},
             phase,
             abort: () => { ctx.aborted = true; },
             aborted: false,

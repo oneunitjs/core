@@ -50,10 +50,6 @@ export function createHelmet(options: HelmetOptions = {}): HelmetMiddleware {
     function headers(): Record<string, string> {
         const h: Record<string, string> = {};
 
-        if (merged.hidePoweredBy) {
-            h["X-Powered-By"] = "";
-        }
-
         if (merged.xssProtection !== undefined) {
             h["X-XSS-Protection"] = merged.xssProtection === true ? "1; mode=block" : String(merged.xssProtection);
         }

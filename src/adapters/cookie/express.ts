@@ -5,6 +5,7 @@
  * Uses req.headers.cookie for reading and res.setHeader("Set-Cookie", ...) for writing.
  */
 import { BaseCookieAdapter, type CookieAdapterConfig } from "./base.js";
+import { buildDeleteCookieParts } from "../../cookie/cookie-utils.js";
 
 export class ExpressCookieAdapter extends BaseCookieAdapter {
     readonly framework = "express" as const;
@@ -28,11 +29,7 @@ export class ExpressCookieAdapter extends BaseCookieAdapter {
         name: string,
         options?: { path?: string; domain?: string },
     ): void {
-        const parts: string[] = [`${name}=;`];
-        if (options?.path) parts.push(`Path=${options.path}`);
-        if (options?.domain) parts.push(`Domain=${options.domain}`);
-        parts.push("Max-Age=0");
-        this.setRawCookieHeader(parts.join("; "));
+        this.setRawCookieHeader(buildDeleteCookieParts(name, options ?? {}).join("; "));
     }
 
     getAllRawCookies(): Record<string, string> {

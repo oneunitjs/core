@@ -76,6 +76,11 @@ export function buildDeleteCookieParts(
     if (options.path) parts.push(`Path=${options.path}`);
     if (options.domain) parts.push(`Domain=${options.domain}`);
     parts.push("Max-Age=0");
+
+    const isSecurePrefixed =
+        name.startsWith("__Secure-") || name.startsWith("__Host-");
+    if (isSecurePrefixed) parts.push("Secure");
+
     return parts;
 }
 
@@ -86,28 +91,4 @@ export function validateCookieName(name: string): void {
     if (!name || /[=;\s]/.test(name)) {
         throw new Error(`Invalid cookie name: ${name}`);
     }
-}
-
-/**
- * Merge user-provided cookie options with defaults.
- */
-export function mergeCookieOptions(
-    defaults: CookieOptions,
-    overrides: CookieOptions = {},
-): CookieOptions {
-    return {
-        path: overrides.path ?? defaults.path ?? "/",
-        domain: overrides.domain ?? defaults.domain,
-        expires: overrides.expires,
-        maxAge: overrides.maxAge ?? defaults.maxAge,
-        secure: overrides.secure ?? defaults.secure ?? false,
-        httpOnly: overrides.httpOnly ?? defaults.httpOnly ?? true,
-        sameSite: overrides.sameSite ?? defaults.sameSite ?? "lax",
-        signed: overrides.signed ?? defaults.signed ?? false,
-        encrypted: overrides.encrypted ?? defaults.encrypted ?? false,
-        secret: overrides.secret ?? defaults.secret,
-        secrets: overrides.secrets ?? defaults.secrets,
-        encode: overrides.encode ?? defaults.encode,
-        decode: overrides.decode ?? defaults.decode,
-    };
 }

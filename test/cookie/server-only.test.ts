@@ -261,17 +261,32 @@ describe("server-only cookie options", () => {
     });
 
     describe("AES-256-GCM encrypted format", () => {
-        it("encrypted value contains auth tag (4 colon-separated parts)", () => {
+        it("encrypted value contains version prefix and auth tag (5 colon-separated parts)", () => {
             const store = createCookieStore({ secret: "my-enc-secret", encrypted: true });
             store.setEncrypted("session", "sensitive-data");
 
             const entry = store["store"].get("session");
             const parts = entry.value.split(":");
-            expect(parts).toHaveLength(4);
-            // parts: [salt, iv, ciphertext, authTag]
-            expect(parts[0].length).toBe(32); // 16 bytes salt as hex
-            expect(parts[1].length).toBe(24); // 12 bytes IV as hex
-            expect(parts[3].length).toBe(32); // 16 bytes auth tag as hex
+            expect(parts).toHaveLength(5);
+            // parts: [version, salt, iv, ciphertext, authTag]
+            expect(parts[0]).toBe("1");
+            expect(parts[1].length).toBe(32); // 16 bytes salt as hex
+            expect(parts[2].length).toBe(24); // 12 bytes IV as hex
+            expect(parts[4].length).toBe(32); // 16 bytes auth tag as hex
+        });
+
+        it("decrypts legacy encrypted cookies without a version prefix (4 parts)", () => {
+            const store = createCookieStore({ secret: "my-enc-secret", encrypted: true });
+            store.setEncrypted("session", "sensitive-data");
+
+            const entry = store["store"].get("session");
+            const parts = entry.value.split(":");
+            // Strip the version prefix to simulate a legacy cookie
+            const legacy = parts.slice(1).join(":");
+            store["store"].set("session", { ...entry, value: legacy });
+
+            const val = store.getEncrypted("session");
+            expect(val).toBe("sensitive-data");
         });
 
         it("tampering with ciphertext fails decryption", () => {

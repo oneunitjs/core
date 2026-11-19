@@ -132,6 +132,7 @@ export class PluginSystem {
             if (!listeners || listeners.length === 0) continue;
 
             const start = Date.now();
+            let anySucceeded = false;
 
             for (const listener of listeners) {
                 let timeoutId: NodeJS.Timeout | null = null;
@@ -146,6 +147,7 @@ export class PluginSystem {
                         listener(context),
                         timeoutPromise,
                     ]);
+                    anySucceeded = true;
                 } catch (err) {
                     clearTimeout(timeoutId!);
                     results.push({
@@ -163,10 +165,12 @@ export class PluginSystem {
                 clearTimeout(timeoutId!);
             }
 
-            results.push({
-                success: true,
-                durationMs: Date.now() - start,
-            });
+            if (anySucceeded) {
+                results.push({
+                    success: true,
+                    durationMs: Date.now() - start,
+                });
+            }
         }
 
         return results;

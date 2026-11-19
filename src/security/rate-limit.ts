@@ -105,6 +105,9 @@ export function createRateLimit(options: RateLimitOptions = {}): RateLimitMiddle
     }
 
     function getKey(req: unknown): string {
+        if (req === null || req === undefined) {
+            return "unknown";
+        }
         if (merged.keyGenerator) {
             return merged.keyGenerator(req);
         }

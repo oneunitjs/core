@@ -11,10 +11,15 @@ import type { CreateConfigOptions, Config, ServiceConfig } from "./types.js";
 export function createConfig(options: CreateConfigOptions = {}): Config {
     const environment = resolveNodeEnv(options.nodeEnv);
 
+    const port = options.port ?? envNumber("PORT") ?? 3000;
+    if (port < 1 || port > 65535) {
+        throw new Error(`Invalid port: ${port}. Port must be between 1 and 65535.`);
+    }
+
     const config: Config = {
-        port: envNumber("PORT", options.port ?? 3000)!,
-        host: envString("HOST", options.host ?? "localhost")!,
-        serviceName: envString("SERVICE_NAME", options.serviceName ?? "app")!,
+        port,
+        host: options.host ?? envString("HOST") ?? "localhost",
+        serviceName: options.serviceName ?? envString("SERVICE_NAME") ?? "app",
         nodeEnv: environment,
         isDevelopment: isDevelopment(environment),
         isProduction: isProduction(environment),

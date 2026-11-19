@@ -11,6 +11,7 @@ import type {
 } from "./types.js";
 import { DEFAULT_COOKIE_CONFIG, mergeCookieOptions } from "./configs.js";
 import { createExpressCookieAdapter } from "../adapters/cookie/express.js";
+import { createFastifyCookieAdapter } from "../adapters/cookie/fastify.js";
 import { createKoaCookieAdapter } from "../adapters/cookie/koa.js";
 import { createHttpCookieAdapter } from "../adapters/cookie/http.js";
 import {
@@ -23,6 +24,7 @@ import {
 } from "./cookie-utils.js";
 
 const GCM_IV_LENGTH = 12;
+const ENCRYPTION_VERSION = 1;
 
 function deriveKey(secret: string, salt: string, keyLength: number = 32): Buffer {
     return scryptSync(secret, salt, keyLength);
@@ -47,14 +49,27 @@ function encryptValue(value: string, options: Required<ServerOnlyCookieOptions>)
     let encrypted = cipher.update(value, "utf8", "hex");
     encrypted += cipher.final("hex");
     const authTag = cipher.getAuthTag().toString("hex");
-    return `${salt}:${iv.toString("hex")}:${encrypted}:${authTag}`;
+    return `${ENCRYPTION_VERSION}:${salt}:${iv.toString("hex")}:${encrypted}:${authTag}`;
 }
 
 function decryptValue(encrypted: string, options: Required<ServerOnlyCookieOptions>): string | null {
     try {
         const parts = encrypted.split(":");
-        if (parts.length !== 4) return null;
-        const [salt, ivHex, ciphertext, authTag] = parts;
+        let salt: string;
+        let ivHex: string;
+        let ciphertext: string;
+        let authTag: string;
+
+        if (parts.length === 5 && parts[0] === String(ENCRYPTION_VERSION)) {
+            // v1 format: version:salt:iv:ciphertext:authTag
+            [, salt, ivHex, ciphertext, authTag] = parts;
+        } else if (parts.length === 4) {
+            // Legacy format: salt:iv:ciphertext:authTag (no version prefix)
+            [salt, ivHex, ciphertext, authTag] = parts;
+        } else {
+            return null;
+        }
+
         if (!salt || !ivHex || !ciphertext || !authTag) return null;
         const iv = Buffer.from(ivHex, "hex");
         const key = deriveKey(options.secret, salt, 32);
@@ -274,6 +289,9 @@ export function detectCookieFramework(
     if (ctx?.cookies) {
         return { framework: "koa", confidence: "high" };
     }
+    if (req?.cookies) {
+        return { framework: "fastify", confidence: "high" };
+    }
     if (req?.headers?.cookie) {
         return { framework: "express", confidence: "high" };
     }
@@ -292,6 +310,9 @@ export function createDetectedCookieStore(
     const detected = detectCookieFramework(req, res, ctx);
     if (detected.framework === "koa" && ctx) {
         return createCookieStoreFromAdapter(createKoaCookieAdapter(ctx), config);
+    }
+    if (detected.framework === "fastify" && req && res?.setCookie) {
+        return createCookieStoreFromAdapter(createFastifyCookieAdapter(req, res), config);
     }
     if (detected.framework === "express" && req && res) {
         return createCookieStoreFromAdapter(createExpressCookieAdapter(req, res), config);

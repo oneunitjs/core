@@ -1,8 +1,10 @@
 import { getSystemInfo } from "../lib/system.js";
-import { getSystemStatus, type SystemThresholds } from "../lib/system-status.js";
+import { getSystemStatus, DEFAULT_THRESHOLDS, type SystemThresholds } from "../lib/system-status.js";
 import type { HealthProvider, HealthCheckResult, HealthRegistry } from "./types.js";
 import { pingDocker, listDockerContainers, type DockerContainerInfo } from "../lib/docker.js";
 import { pingKubernetes, listK8sPods, type K8sPodInfo } from "../lib/kubernetes.js";
+import { existsSync } from "node:fs";
+import process from "node:process";
 
 export type HealthEnvironment = "system" | "docker" | "kubernetes";
 
@@ -29,13 +31,18 @@ export function createSystemHealthProvider(options?: {
         check: async (): Promise<HealthCheckResult> => {
             const info = getSystemInfo();
 
+            const normalizedLoad =
+                info.cpu.cores > 0
+                    ? info.cpu.loadAverage.oneMinute / info.cpu.cores
+                    : 0;
+
             const checks: Record<string, { status: boolean; message?: string }> = {
                 memory: {
-                    status: info.memory.usagePercent < 90,
+                    status: info.memory.usagePercent < DEFAULT_THRESHOLDS.memory.degraded,
                     message: `${info.memory.usagePercent.toFixed(2)}% memory used`,
                 },
                 cpu: {
-                    status: info.cpu.loadAverage.oneMinute < info.cpu.cores,
+                    status: normalizedLoad < DEFAULT_THRESHOLDS.load.degraded,
                     message: `1-minute load average: ${info.cpu.loadAverage.oneMinute}`,
                 },
             };
@@ -146,8 +153,8 @@ export function createKubernetesHealthProvider(options?: {
 export function detectHealthEnvironment(): DetectedHealthEnvironment {
     return {
         system: true,
-        docker: false,
-        kubernetes: false,
+        docker: existsSync("/var/run/docker.sock"),
+        kubernetes: !!process.env.KUBERNETES_SERVICE_HOST,
     };
 }
 

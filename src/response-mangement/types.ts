@@ -1,3 +1,4 @@
+
 export type HttpStatusCode =
     | 100 | 101 | 102 | 103
     | 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207 | 208 | 226
@@ -173,7 +174,7 @@ export type ResponseManagementPluginOptions = ResponseManagementOptions;
 export const DEFAULT_RESPONSE_CONFIG: Required<Pick<ResponseManagementOptions, "defaultSuccessMessage" | "defaultErrorMessage" | "tryCatchEnabled" | "defaultErrorStatusCode">> = {
     defaultSuccessMessage: "Success",
     defaultErrorMessage: "Error",
-    tryCatchEnabled: false,
+    tryCatchEnabled: true,
     defaultErrorStatusCode: 500,
 };
 

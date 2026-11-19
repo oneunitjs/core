@@ -1,5 +1,5 @@
-export { createApp } from "./simple.js";
-export type { CoreApp } from "./simple.js";
+export { createApp } from "./core.js";
+export type { CoreApp } from "./core.js";
 export type {
     App,
     HealthAPI,

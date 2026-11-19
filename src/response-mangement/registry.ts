@@ -35,6 +35,7 @@ import {
     createKoaResponseAdapter,
     createHttpResponseAdapter,
 } from "../adapters/response/index.js";
+import { InvalidStatusCodeError } from "../errors/response.js";
 
 export { createExpressResponseAdapter, createFastifyResponseAdapter, createKoaResponseAdapter, createHttpResponseAdapter };
 
@@ -126,19 +127,19 @@ export function validateStatus(
     status: number,
     allowedRange: "success" | "error" | "any",
 ): void {
-    if (!Number.isInteger(status) || status < 200 || status > 599) {
-        throw new RangeError(`Invalid HTTP status: ${status}`);
+        if (!Number.isInteger(status) || status < 200 || status > 599) {
+            throw new InvalidStatusCodeError(status);
     }
 
     if (allowedRange === "success") {
         if (!isSuccess(status) || isBodylessStatus(status)) {
-            throw new RangeError("Invalid success response status");
+            throw new InvalidStatusCodeError(status);
         }
     }
 
     if (allowedRange === "error") {
         if (!isClientError(status) && !isServerError(status)) {
-            throw new RangeError("Invalid error response status");
+            throw new InvalidStatusCodeError(status);
         }
     }
 }
@@ -168,7 +169,7 @@ export class ResponseFrameworkManager {
     ) {
         this.manager = manager;
         this.adapter = adapter;
-        this.tryCatchEnabled = options.tryCatchEnabled ?? false;
+        this.tryCatchEnabled = options.tryCatchEnabled ?? true;
         this.defaultErrorStatusCode = options.defaultErrorStatusCode ?? 500;
     }
 
@@ -197,23 +198,16 @@ export class ResponseFrameworkManager {
             } catch (err: any) {
                 const message = err?.message ?? "Internal Server Error";
 
-                this.manager.error({
+                const errorResponse = this.manager.error({
                     status: this.defaultErrorStatusCode,
                     message,
                 });
 
                 this.adapter.send({
                     status: this.defaultErrorStatusCode,
-                    body: this.manager.error({
-                        status: this.defaultErrorStatusCode,
-                        message,
-                    }),
+                    body: errorResponse,
                     headers: { "content-type": "application/json" },
                 });
-
-                if (next) {
-                    next();
-                }
             }
         };
     }
@@ -330,10 +324,8 @@ export class ResponseFrameworkManager {
     }
 
     noContent(): void {
-        this.adapter.send({
+        this.respond({
             status: HTTP_STATUS.NO_CONTENT,
-            body: undefined,
-            headers: {},
         });
     }
 

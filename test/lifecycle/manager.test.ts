@@ -45,7 +45,7 @@ describe("Lifecycle Manager - Initialization", () => {
         const mgr = new LifecycleManager();
         mgr.initialize();
         const result = mgr.initialize();
-        expect(result.success).toBe(true);
+        expect(result.success).toBe(false);
         expect(result.error).toContain("Already initialized");
     });
 

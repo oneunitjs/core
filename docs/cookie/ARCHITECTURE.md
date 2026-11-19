@@ -29,7 +29,7 @@ src/cookie/
 
 - `get(name)` / `set(name, value, options?)` — plain read/write
 - `setSigned` / `getSigned` — HMAC-signed cookies
-- `setEncrypted` / `getEncrypted` — AES-256-CBC encrypted cookies
+- `setEncrypted` / `getEncrypted` — AES-256-GCM encrypted cookies
 - `serialize(name, value, options?)` — builds a `Set-Cookie` header string
 - `parse(cookieHeader)` — parses a `Cookie` header into a record
 - `all()` — returns verified/decrypted values for signed & encrypted cookies
@@ -43,7 +43,7 @@ Every stored cookie is wrapped in a `CookieEntry`:
 interface CookieEntry {
     value: string;      // raw stored value (may be signed/encrypted payload)
     signed: boolean;    // true if value carries a HMAC signature
-    encrypted: boolean; // true if value is AES-256-CBC ciphertext
+    encrypted: boolean; // true if value is AES-256-GCM ciphertext
     secret?: string;    // secret used to sign/encrypt (falls back to config secret)
 }
 ```
@@ -83,7 +83,7 @@ Three mutually-exclusive modes per `set()` call:
 |------|---------|-----------|-----------------|
 | Plain | `value` | `get()` | No |
 | Signed | `value.signature` (HMAC-SHA256) | `getSigned()` verifies signature | Yes |
-| Encrypted | `salt:iv:ciphertext` (AES-256-CBC) | `getEncrypted()` decrypts | Yes |
+| Encrypted | `version:salt:iv:ciphertext:authTag` (AES-256-GCM) | `getEncrypted()` decrypts | Yes |
 
 - `signed: true` on config auto-signs every `set()`.
 - `encrypted: true` on config auto-encrypts every `set()`.
@@ -92,9 +92,10 @@ Three mutually-exclusive modes per `set()` call:
 
 ## Crypto
 
-- Signing: `createHmac("sha256" | "sha512", secret).update(value).digest("hex")`
-- Encryption: `scryptSync(secret, salt, 32)` → AES-256-CBC with random 16-byte salt and IV
-- Serialized form: `salt:iv:ciphertext` (all hex)
+- Signing: `createHmac("sha256" | "sha512", secret).update(value).digest("hex")`, compared with `timingSafeEqual`
+- Encryption: `scryptSync(secret, salt, 32)` → AES-256-GCM with random 16-byte salt and 12-byte IV, plus auth tag
+- Serialized form: `version:salt:iv:ciphertext:authTag` (all hex), version `1`
+- Legacy format `salt:iv:ciphertext:authTag` (no version prefix) is still decryptable for backward compatibility
 - Tampered signed cookies → `getSigned()` returns `undefined`
 - Tampered encrypted cookies → `getEncrypted()` returns `null`
 
@@ -119,6 +120,16 @@ interface CookieAdapter {
 | `createHttpCookieAdapter(req, res)` | node:http `req`, `res` | node:http |
 
 Adapters handle reading the `Cookie` header and writing `Set-Cookie` headers natively for their framework.
+
+**Detection priority** (used by `detectCookieFramework` / `createDetectedCookieStore`):
+
+1. `ctx.cookies` → Koa
+2. `req.cookies` → Fastify
+3. `req.headers.cookie` + `res.setHeader` → Express
+4. `res.setHeader` only → node:http
+5. Otherwise → plain in-memory store
+
+Prefer explicit adapter selection in production; auto-detection can misidentify frameworks with similar interfaces.
 
 ## Store variants
 

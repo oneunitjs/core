@@ -77,6 +77,7 @@ export class MiddlewareRegistry {
     private readonly maxMiddleware: number;
     private readonly allowedTypes: Set<string> | null;
     private readonly executionTimeoutMs: number;
+    private readonly terminalMiddleware = new Set<string>();
 
     constructor(options: LifecycleOptions) {
         this.maxMiddleware = options.maxMiddleware ?? 50;
@@ -90,7 +91,7 @@ export class MiddlewareRegistry {
         name: string,
         type: string,
         middleware: (_req: unknown, _res: unknown, _next?: () => void) => void | Promise<void>,
-        options: { priority?: number; conflictTypes?: string[]; version?: string; trackHeaders?: string[] } = {},
+        options: { priority?: number; conflictTypes?: string[]; version?: string; trackHeaders?: string[]; terminal?: boolean } = {},
     ): { success: boolean; conflicts: ConflictInfo[]; headerConflicts: HeaderConflict[]; error?: string } {
         if (this.middleware.size >= this.maxMiddleware) {
             return {
@@ -125,6 +126,10 @@ export class MiddlewareRegistry {
         this.middleware.set(name, registration);
         this.conflicts.push(...conflicts);
 
+        if (options.terminal) {
+            this.terminalMiddleware.add(name);
+        }
+
         // Recompute header conflicts after each registration
         this.headerConflicts.length = 0;
         this.headerConflicts.push(...detectHeaderConflicts([...this.middleware.values()]));
@@ -141,6 +146,7 @@ export class MiddlewareRegistry {
         if (!reg) return false;
 
         this.middleware.delete(name);
+        this.terminalMiddleware.delete(name);
 
         this.conflicts.splice(
             0,
@@ -201,20 +207,34 @@ export class MiddlewareRegistry {
             };
         }
 
+        let timeoutId: NodeJS.Timeout | null = null;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+                reject(new Error(`Middleware "${name}" timed out`));
+            }, this.executionTimeoutMs);
+        });
+
         try {
-            await reg.middleware(ctx.req, ctx.res, ctx.next);
+            await Promise.race([
+                reg.middleware(ctx.req, ctx.res, ctx.next),
+                timeoutPromise,
+            ]);
         } catch (err) {
             return {
                 success: false,
-                aborted: false,
+                aborted: ctx.aborted,
                 error: err instanceof Error ? err : new Error(String(err)),
                 durationMs: Date.now() - start,
             };
+        } finally {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
         }
 
         return {
             success: true,
-            aborted: false,
+            aborted: ctx.aborted,
             durationMs: Date.now() - start,
         };
     }
@@ -225,21 +245,31 @@ export class MiddlewareRegistry {
         const results: MiddlewareResult[] = [];
         const ordered = this.list();
 
+        let nextCalled = false;
+        const trackNext = () => {
+            nextCalled = true;
+            ctx.next();
+        };
+
         for (const reg of ordered) {
             if (ctx.aborted) break;
 
+            nextCalled = false;
             const result = await this.execute(reg.name, {
                 ...ctx,
+                next: trackNext,
                 phase: ctx.phase,
             });
 
             results.push(result);
 
-            if (!result.success && !result.aborted) {
-                continue;
+            if (result.aborted) {
+                ctx.aborted = true;
+                break;
             }
 
-            if (result.aborted) {
+            // If middleware didn't call next(), abort the chain (unless terminal)
+            if (!nextCalled && !this.terminalMiddleware.has(reg.name)) {
                 ctx.aborted = true;
                 break;
             }

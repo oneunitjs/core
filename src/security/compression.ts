@@ -1,4 +1,4 @@
-import { constants } from "node:zlib";
+import { constants, brotliCompressSync, gzipSync, deflateSync } from "node:zlib";
 import type { CompressionOptions } from "./types.js";
 export type { CompressionOptions };
 import { createSecurityMiddlewareBase } from "./middleware-base.js";
@@ -11,6 +11,8 @@ const DEFAULT_COMPRESSION_OPTIONS: CompressionOptions = {
     windowBits: 15,
 };
 
+const COMPRESSION_PATCHED = "__oneunit_compression_patched";
+
 function selectEncoding(acceptEncoding: string): "gzip" | "deflate" | "br" | null {
     const ae = acceptEncoding.toLowerCase();
     if (ae.includes("br")) return "br";
@@ -21,12 +23,12 @@ function selectEncoding(acceptEncoding: string): "gzip" | "deflate" | "br" | nul
 
 function compressSync(data: Buffer, encoding: "gzip" | "deflate" | "br", level: number): Buffer {
     if (encoding === "br") {
-        return require("node:zlib").brotliCompressSync(data, { params: { [constants.BROTLI_PARAM_QUALITY]: level } });
+        return brotliCompressSync(data, { params: { [constants.BROTLI_PARAM_QUALITY]: level } });
     }
     if (encoding === "gzip") {
-        return require("node:zlib").gzipSync(data, { level });
+        return gzipSync(data, { level });
     }
-    return require("node:zlib").deflateSync(data, { level });
+    return deflateSync(data, { level });
 }
 
 export interface CompressionMiddleware {
@@ -75,6 +77,11 @@ export function createCompression(options: CompressionOptions = {}): Compression
 
         const resAny = res as any;
 
+        if (resAny[COMPRESSION_PATCHED]) {
+            if (next) next();
+            return;
+        }
+
         const chunks: Buffer[] = [];
         if (typeof resAny.write === "function" && typeof resAny.end === "function") {
             const originalEnd = resAny.end.bind(resAny);
@@ -111,6 +118,8 @@ export function createCompression(options: CompressionOptions = {}): Compression
                     originalEnd(body, ...args);
                 }
             };
+
+            resAny[COMPRESSION_PATCHED] = true;
         }
 
         if (next) next();

@@ -8,9 +8,9 @@
  * deleteRawCookieHeader(), getAllRawCookies().
  */
 import type { CookieOptions } from "../../cookie/types.js";
+import { parseCookie } from "cookie";
 import {
-    parseCookieHeader,
-    buildCookieParts,
+    serializeCookieString,
     validateCookieName,
 } from "../../cookie/cookie-utils.js";
 import { AdapterError, type BaseAdapter, type FrameworkName } from "../types.js";
@@ -55,7 +55,7 @@ export abstract class BaseCookieAdapter implements BaseAdapter {
                 "ADAPTER_NOT_INITIALIZED",
             );
         }
-        return parseCookieHeader(this.getRawCookieHeader() ?? "")[name];
+        return parseCookie(this.getRawCookieHeader() ?? "")[name];
     }
 
     /**
@@ -76,7 +76,7 @@ export abstract class BaseCookieAdapter implements BaseAdapter {
         }
         validateCookieName(name);
         this.setRawCookieHeader(
-            buildCookieParts(name, value, options).join("; "),
+            serializeCookieString(name, value, options),
         );
     }
 

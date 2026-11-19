@@ -19,6 +19,8 @@ class HooksImpl<Context = unknown, HookName extends string = string>
     private readonly store = new Map<string, HookListener<Context>[]>();
     private readonly throwOnError: boolean;
     private readonly allowedHooks: Set<string> | null;
+    private readonly onceWrappers = new Map<HookListener<Context>, HookListener<Context>>();
+    private readonly errors: Error[] = [];
 
     constructor(options: HooksOptions = {}) {
         this.throwOnError = options.throwOnError ?? false;
@@ -58,14 +60,20 @@ class HooksImpl<Context = unknown, HookName extends string = string>
      * If the hook has no more listeners after removal, the hook entry is deleted.
      */
     off(name: HookName, listener: HookListener<Context>): Hooks<Context, HookName> {
+        const wrapper = this.onceWrappers.get(listener);
+        const target = wrapper ?? listener;
+
         const existing = this.store.get(name as string);
         if (!existing) {
             return this;
         }
 
-        const index = existing.indexOf(listener);
+        const index = existing.indexOf(target);
         if (index !== -1) {
             existing.splice(index, 1);
+            if (wrapper) {
+                this.onceWrappers.delete(listener);
+            }
         }
 
         if (existing.length === 0) {
@@ -79,9 +87,11 @@ class HooksImpl<Context = unknown, HookName extends string = string>
         this.validateHook(name as string);
         const onceListener: HookListener<Context> = async (context) => {
             this.off(name, onceListener);
+            this.onceWrappers.delete(listener);
             await listener(context);
         };
 
+        this.onceWrappers.set(listener, onceListener);
         return this.on(name, onceListener);
     }
 
@@ -96,6 +106,7 @@ class HooksImpl<Context = unknown, HookName extends string = string>
             try {
                 await listener(context);
             } catch (err) {
+                this.errors.push(err instanceof Error ? err : new Error(String(err)));
                 if (this.throwOnError) {
                     throw err;
                 }
@@ -114,11 +125,16 @@ class HooksImpl<Context = unknown, HookName extends string = string>
             try {
                 listener(context);
             } catch (err) {
+                this.errors.push(err instanceof Error ? err : new Error(String(err)));
                 if (this.throwOnError) {
                     throw err;
                 }
             }
         }
+    }
+
+    getErrors(): Error[] {
+        return [...this.errors];
     }
 
     has(name: HookName): boolean {

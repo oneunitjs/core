@@ -83,6 +83,11 @@ export class FastifyCookieAdapter extends BaseCookieAdapter {
         const fastifyOptions: Record<string, unknown> = {};
         if (options?.path) fastifyOptions.path = options.path;
         if (options?.domain) fastifyOptions.domain = options.domain;
+
+        const isSecurePrefixed =
+            name.startsWith("__Secure-") || name.startsWith("__Host-");
+        if (isSecurePrefixed) fastifyOptions.secure = true;
+
         (this.response as {
             unsetCookie(name: string, options?: Record<string, unknown>): void;
         }).unsetCookie(name, fastifyOptions);

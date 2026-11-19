@@ -58,7 +58,7 @@ export function getSystemStatus(
     const normalizedLoad =
         system.cpu.cores > 0
             ? system.cpu.loadAverage.oneMinute / system.cpu.cores
-            : 0;
+            : Infinity;
 
     /*
      * Dependency failure is immediately unhealthy.

@@ -93,6 +93,8 @@ import type {
 import type {
     ResponseFrameworkAdapter,
     RespondOptions,
+    ResponseOptions,
+    ErrorOptions,
 } from "./response-mangement/types.js";
 
 import {
@@ -121,7 +123,6 @@ import {
     type PluginResult,
     type PluginContext,
 } from "./lifecycle/index.js";
-import { ResponseRequiresRequestResponseError } from "./errors/core.js";
 
 import {
     createMsgPack,
@@ -136,10 +137,6 @@ import {
     createHttpResponseAdapter,
     detectResponseFramework,
 } from "./response-mangement/index.js";
-import type {
-    ResponseOptions,
-    ErrorOptions,
-} from "./response-mangement/types.js";
 
 import {
     formatBytes,
@@ -375,6 +372,16 @@ export function createApp(options?: AppOptions): App {
 
     const config = createConfig(configOptions);
 
+    const knownConfigKeys = new Set([
+        "port",
+        "host",
+        "serviceName",
+        "nodeEnv",
+        "isDevelopment",
+        "isProduction",
+        "isTest",
+    ]);
+
     const configAPI: ConfigAPI = {
         get port() { return config.port; },
         get host() { return config.host; },
@@ -387,9 +394,15 @@ export function createApp(options?: AppOptions): App {
             return config.toJSON() as unknown as Record<string, unknown>;
         },
         set(key, value) {
+            if (!knownConfigKeys.has(key)) {
+                throw new Error(`Unknown config key: ${key}`);
+            }
             (config as any)[key] = value;
         },
         get(key) {
+            if (!knownConfigKeys.has(key)) {
+                throw new Error(`Unknown config key: ${key}`);
+            }
             return (config as any)[key];
         },
     };
@@ -477,8 +490,6 @@ export function createApp(options?: AppOptions): App {
         ...cookie,
     };
 
-    let cachedCookieStore: ReturnType<typeof createDetectedCookieStore> | null = null;
-    let cachedCookieReqRes: { req: unknown; res: unknown } | null = null;
     const namedCookieStores: Map<string, ReturnType<typeof createDetectedCookieStore>> = new Map();
 
     function buildCookieAPI(store: ReturnType<typeof createDetectedCookieStore>): CookieStoreAPI {
@@ -539,11 +550,18 @@ export function createApp(options?: AppOptions): App {
         return buildCookieAPI(store);
     }
 
-    let api: CookieStoreAPI = buildCookieAPI(createCookieStore(cookieConfig));
+    const api: CookieStoreAPI = buildCookieAPI(createCookieStore(cookieConfig));
+
+    const reqResCookieCache: Map<unknown, ReturnType<typeof createDetectedCookieStore>> = new Map();
 
     const cookieStoreAPI = (req?: unknown, res?: unknown): CookieStoreAPI => {
         if (req && res) {
-            return buildCookieAPI(createDetectedCookieStore(req, res, undefined, cookieConfig));
+            let store = reqResCookieCache.get(req);
+            if (!store) {
+                store = createDetectedCookieStore(req, res, undefined, cookieConfig);
+                reqResCookieCache.set(req, store);
+            }
+            return buildCookieAPI(store);
         }
         return api;
     };
@@ -694,12 +712,10 @@ export function createApp(options?: AppOptions): App {
     };
 
     let cachedResponseAdapter: any = null;
-    let cachedResponseReqRes: { req: unknown; res: unknown } | null = null;
     const memoryResponse: Record<string, any> = {};
 
     const responseAPI = (req?: unknown, res?: unknown): ResponseAPI => {
         if (req && res) {
-            cachedResponseReqRes = { req, res };
             const detected = detectResponseFramework(
                 (req as any)?.headers,
                 res as any,
@@ -717,8 +733,6 @@ export function createApp(options?: AppOptions): App {
                 adapter = createFastifyResponseAdapter(res as any);
             }
             cachedResponseAdapter = adapter;
-        } else if (cachedResponseAdapter && cachedResponseReqRes) {
-            // Return cached adapter-based API
         } else {
             // Return a memory-based response adapter when no req/res provided
             const memoryAdapter: ResponseFrameworkAdapter = {

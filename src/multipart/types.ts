@@ -39,6 +39,8 @@ export type MultipartOptions = {
     tmpdir?: string;
     /** Headers limits */
     headersLimit?: number;
+    /** Parse timeout in milliseconds (default: 10000) */
+    timeoutMs?: number;
 };
 
 export interface MultipartMiddleware {
