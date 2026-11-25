@@ -67,8 +67,19 @@ export function deepFreeze<T>(value: T): T {
     ) {
         Object.freeze(value);
 
-        for (const child of Object.values(value)) {
-            deepFreeze(child);
+        if (value instanceof Map) {
+            for (const [key, child] of value) {
+                deepFreeze(key);
+                deepFreeze(child);
+            }
+        } else if (value instanceof Set) {
+            for (const child of value) {
+                deepFreeze(child);
+            }
+        } else {
+            for (const child of Object.values(value)) {
+                deepFreeze(child);
+            }
         }
     }
 
@@ -84,10 +95,25 @@ function deepClone(value: unknown): unknown {
         return value.map(deepClone);
     }
 
+    if (value instanceof Map) {
+        return new Map([...value.entries()].map(([k, v]) => [deepClone(k), deepClone(v)]));
+    }
+
+    if (value instanceof Set) {
+        return new Set([...value.values()].map(deepClone));
+    }
+
+    if (value instanceof Date) {
+        return new Date(value.getTime());
+    }
+
     if (isPlainObject(value)) {
         const result: Record<string, unknown> = {};
 
         for (const [key, val] of Object.entries(value)) {
+            if (UNSAFE_KEYS.has(key)) {
+                continue;
+            }
             result[key] = deepClone(val);
         }
 

@@ -1,8 +1,8 @@
 import { getSystemInfo } from "../lib/system.js";
 import { getSystemStatus, DEFAULT_THRESHOLDS, type SystemThresholds } from "../lib/system-status.js";
 import type { HealthProvider, HealthCheckResult, HealthRegistry } from "./types.js";
-import { pingDocker, listDockerContainers, type DockerContainerInfo } from "../lib/docker.js";
-import { pingKubernetes, listK8sPods, type K8sPodInfo } from "../lib/kubernetes.js";
+import { pingDocker, listDockerContainers } from "../lib/docker.js";
+import { pingKubernetes, listK8sPods } from "../lib/kubernetes.js";
 import { existsSync } from "node:fs";
 import process from "node:process";
 

@@ -119,7 +119,6 @@ describe("Response Management — Real Framework Servers", () => {
     // ===== FASTIFY =====
     describe("Fastify real server", () => {
         let fastify: Fastify.FastifyInstance;
-        let port: number;
 
         beforeAll(async () => {
             fastify = Fastify();
@@ -151,7 +150,6 @@ describe("Response Management — Real Framework Servers", () => {
 
             await fastify.ready();
             await new Promise<void>((resolve) => fastify.server.listen(0, resolve));
-            port = (fastify.server.address() as any).port;
         });
 
         afterAll(async () => {
@@ -332,10 +330,7 @@ describe("Response Management — Real Framework Servers", () => {
 
         it("noContent() returns 204", async () => {
             const manager = createResponseManager();
-            let testServer: http.Server;
-            let testPort: number;
-
-            testServer = http.createServer((req, res) => {
+            const testServer = http.createServer((req, res) => {
                 const adapter = createHttpResponseAdapter(res);
                 const rfm = createResponseFrameworkManager(manager, adapter);
                 if (req.url === "/nocontent") {
@@ -345,7 +340,7 @@ describe("Response Management — Real Framework Servers", () => {
                 }
             });
             await new Promise<void>((resolve) => testServer.listen(0, resolve));
-            testPort = (testServer.address() as any).port;
+            const testPort = (testServer.address() as any).port;
 
             const res = await new Promise<{ statusCode: number }>((resolve, reject) => {
                 const req = http.request(

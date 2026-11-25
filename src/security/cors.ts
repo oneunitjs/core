@@ -15,6 +15,11 @@ const DEFAULT_CORS_OPTIONS: CorsOptions = {
 
 type OriginValue = string | string[] | boolean;
 
+function normalizeOriginValue(origin: CorsOptions["origin"]): OriginValue {
+    if (origin === undefined) return DEFAULT_CORS_OPTIONS.origin!;
+    return origin;
+}
+
 function isOriginAllowed(origin: string | undefined, allowed: OriginValue): boolean {
     if (!origin) return false;
     if (allowed === true) return true;
@@ -24,11 +29,22 @@ function isOriginAllowed(origin: string | undefined, allowed: OriginValue): bool
     return false;
 }
 
-function resolveOrigin(origin: string | undefined, allowed: OriginValue): string | null {
+/**
+ * Resolve the Access-Control-Allow-Origin value to echo back.
+ *
+ * When credentials are enabled, a wildcard origin is never echoed back
+ * because the CORS specification forbids `Access-Control-Allow-Origin: *`
+ * together with `Access-Control-Allow-Credentials: true`. Callers must
+ * supply an explicit origin allowlist (or `true`) when credentials are used.
+ */
+function resolveOrigin(origin: string | undefined, allowed: OriginValue, credentials: boolean): string | null {
     if (allowed === true) return origin ?? null;
     if (allowed === false) return null;
     if (typeof allowed === "string") {
-        if (allowed === "*") return "*";
+        if (allowed === "*") {
+            if (credentials) return null;
+            return "*";
+        }
         if (!origin) return allowed;
         return allowed === origin ? allowed : null;
     }
@@ -39,6 +55,27 @@ function resolveOrigin(origin: string | undefined, allowed: OriginValue): string
     return null;
 }
 
+function headerList(value: string[] | undefined): string | undefined {
+    if (!value || value.length === 0) return undefined;
+    return value.join(", ");
+}
+
+/**
+ * Append a value to an existing comma-separated header without clobbering
+ * values already set by the application or other middleware.
+ */
+function appendVary(res: any, value: string): void {
+    if (typeof res.getHeader === "function") {
+        const existing = res.getHeader("Vary");
+        if (existing !== undefined) {
+            value = Array.isArray(existing)
+                ? existing.concat([value]).join(", ")
+                : `${existing}, ${value}`;
+        }
+    }
+    res.setHeader("Vary", value);
+}
+
 export interface CorsMiddleware {
     name: string;
     enabled: boolean;
@@ -47,12 +84,12 @@ export interface CorsMiddleware {
     disable(): void;
     toggle(): void;
     middleware(): (req: unknown, res: unknown, next?: () => void) => void;
-    headers(): Record<string, string>;
+    headers(): { headers: Record<string, string>; varyOrigin: boolean };
 }
 
 export function createCors(options: CorsOptions = {}): CorsMiddleware {
     const merged: CorsOptions = {
-        origin: options.origin ?? DEFAULT_CORS_OPTIONS.origin,
+        origin: normalizeOriginValue(options.origin),
         methods: options.methods ?? DEFAULT_CORS_OPTIONS.methods,
         allowedHeaders: options.allowedHeaders ?? DEFAULT_CORS_OPTIONS.allowedHeaders,
         exposedHeaders: options.exposedHeaders ?? DEFAULT_CORS_OPTIONS.exposedHeaders,
@@ -62,60 +99,103 @@ export function createCors(options: CorsOptions = {}): CorsMiddleware {
         optionsSuccessStatus: options.optionsSuccessStatus ?? DEFAULT_CORS_OPTIONS.optionsSuccessStatus,
     };
 
-    function headers(originHeader: string | undefined): Record<string, string> {
+    const credentials = !!merged.credentials;
+    const originValue: OriginValue = merged.origin as OriginValue;
+    const methodsHeader = headerList(merged.methods);
+    const allowedHeadersHeader = headerList(merged.allowedHeaders);
+    const exposedHeadersHeader = headerList(merged.exposedHeaders);
+    const credentialsHeader = String(credentials);
+    const maxAgeHeader = String(merged.maxAge ?? 0);
+
+    function headers(originHeader: string | undefined): { headers: Record<string, string>; varyOrigin: boolean } {
         const h: Record<string, string> = {};
+        let varyOrigin = false;
 
-        const resolvedOrigin = resolveOrigin(originHeader, merged.origin as OriginValue);
+        const resolvedOrigin = resolveOrigin(originHeader, originValue, credentials);
         if (resolvedOrigin !== null) {
-            h["Access-Control-Allow-Origin"] = resolvedOrigin === "*" ? "*" : resolvedOrigin;
+            h["Access-Control-Allow-Origin"] = resolvedOrigin;
         }
 
-        if (merged.credentials && merged.origin === "*" && originHeader) {
-            h["Access-Control-Allow-Origin"] = originHeader;
+        if (methodsHeader) h["Access-Control-Allow-Methods"] = methodsHeader;
+        if (allowedHeadersHeader) h["Access-Control-Allow-Headers"] = allowedHeadersHeader;
+        if (exposedHeadersHeader) h["Access-Control-Expose-Headers"] = exposedHeadersHeader;
+        h["Access-Control-Allow-Credentials"] = credentialsHeader;
+
+        // Vary: Origin tells caches the response depends on the request Origin.
+        // Only emit it when the server is actually reflecting an origin (or
+        // when credentials are in play); a pure wildcard response is cacheable.
+        if (resolvedOrigin !== null && resolvedOrigin !== "*") {
+            varyOrigin = true;
+        } else if (credentials) {
+            varyOrigin = true;
         }
 
-        if (merged.methods) {
-            h["Access-Control-Allow-Methods"] = merged.methods.join(", ");
-        }
-        if (merged.allowedHeaders) {
-            h["Access-Control-Allow-Headers"] = merged.allowedHeaders.join(", ");
-        }
-        if (merged.exposedHeaders && merged.exposedHeaders.length > 0) {
-            h["Access-Control-Expose-Headers"] = merged.exposedHeaders.join(", ");
-        }
-        if (merged.credentials !== undefined) {
-            h["Access-Control-Allow-Credentials"] = String(merged.credentials);
-        }
         if (merged.maxAge !== undefined && merged.preflightContinue !== true) {
-            h["Access-Control-Max-Age"] = String(merged.maxAge);
+            h["Access-Control-Max-Age"] = maxAgeHeader;
         }
 
-        return h;
+        return { headers: h, varyOrigin };
+    }
+
+    function isMethodAllowed(method: string | undefined): boolean {
+        if (!method) return false;
+        const upper = method.toUpperCase();
+        return (merged.methods ?? []).includes(upper);
+    }
+
+    function areHeadersAllowed(requested: string | undefined): boolean {
+        if (!requested) return true;
+        const allowedSet = new Set(
+            (merged.allowedHeaders ?? []).map((h) => h.toLowerCase()),
+        );
+        return requested
+            .split(",")
+            .map((h) => h.trim().toLowerCase())
+            .every((h) => h === "" || allowedSet.has(h));
     }
 
     const coreMiddleware = (req: any, res: any, next?: () => void) => {
         const originHeader = req?.headers?.origin;
-        const h = headers(originHeader);
+        const { headers: h, varyOrigin } = headers(originHeader);
 
         for (const [key, value] of Object.entries(h)) {
+            if (key === "Vary") continue; // applied via appendVary below
             res.setHeader(key, value);
+        }
+        if (varyOrigin) {
+            appendVary(res, "Origin");
         }
 
         const method = req?.method;
         const isPreflight = method === "OPTIONS";
 
         if (isPreflight) {
-            const originAllowed = isOriginAllowed(originHeader, merged.origin as OriginValue);
-            if (!originAllowed && merged.origin !== "*") {
+            const originAllowed = isOriginAllowed(originHeader, originValue);
+            if (!originAllowed) {
                 res.statusCode = 403;
                 res.end(JSON.stringify({ error: "CORS origin not allowed" }));
                 return;
             }
+
+            const requestedMethod = req?.headers?.["access-control-request-method"];
+            if (requestedMethod && !isMethodAllowed(String(requestedMethod))) {
+                res.statusCode = 403;
+                res.end(JSON.stringify({ error: "CORS method not allowed" }));
+                return;
+            }
+
+            const requestedHeaders = req?.headers?.["access-control-request-headers"];
+            if (requestedHeaders && !areHeadersAllowed(String(requestedHeaders))) {
+                res.statusCode = 403;
+                res.end(JSON.stringify({ error: "CORS headers not allowed" }));
+                return;
+            }
+
             if (merged.preflightContinue && next) {
                 next();
                 return;
             }
-            if (res && typeof res.statusCode === "number") {
+            if (typeof res.statusCode === "number") {
                 res.statusCode = merged.optionsSuccessStatus ?? 204;
             }
             if (typeof res.end === "function") {
@@ -132,7 +212,7 @@ export function createCors(options: CorsOptions = {}): CorsMiddleware {
     return {
         name: base.name,
         get enabled() { return base.enabled; },
-        get options() { return base.options; },
+        get options() { return { ...merged }; },
         enable() { base.enable(); },
         disable() { base.disable(); },
         toggle() { base.toggle(); },

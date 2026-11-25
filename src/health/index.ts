@@ -1,12 +1,12 @@
 export {
     createExpressHealthAdapter as expressHealth,
-} from "../adapters/health/express.js";
+} from "../adapters/express/health.js";
 export {
     createFastifyHealthAdapter as fastifyHealth,
-} from "../adapters/health/fastify.js";
+} from "../adapters/fastify/health.js";
 export {
     createKoaHealthAdapter as koaHealth,
-} from "../adapters/health/koa.js";
+} from "../adapters/koa/health.js";
 export {
     createHealthRegistry,
 } from "./registry.js";

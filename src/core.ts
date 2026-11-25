@@ -552,10 +552,10 @@ export function createApp(options?: AppOptions): App {
 
     const api: CookieStoreAPI = buildCookieAPI(createCookieStore(cookieConfig));
 
-    const reqResCookieCache: Map<unknown, ReturnType<typeof createDetectedCookieStore>> = new Map();
+    const reqResCookieCache: WeakMap<object, ReturnType<typeof createDetectedCookieStore>> = new WeakMap();
 
     const cookieStoreAPI = (req?: unknown, res?: unknown): CookieStoreAPI => {
-        if (req && res) {
+        if (req && res && typeof req === "object") {
             let store = reqResCookieCache.get(req);
             if (!store) {
                 store = createDetectedCookieStore(req, res, undefined, cookieConfig);

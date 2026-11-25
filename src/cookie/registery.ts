@@ -10,10 +10,10 @@ import type {
     ServerOnlyCookieOptions,
 } from "./types.js";
 import { DEFAULT_COOKIE_CONFIG, mergeCookieOptions } from "./configs.js";
-import { createExpressCookieAdapter } from "../adapters/cookie/express.js";
-import { createFastifyCookieAdapter } from "../adapters/cookie/fastify.js";
-import { createKoaCookieAdapter } from "../adapters/cookie/koa.js";
-import { createHttpCookieAdapter } from "../adapters/cookie/http.js";
+import { createExpressCookieAdapter } from "../adapters/express/cookie.js";
+import { createFastifyCookieAdapter } from "../adapters/fastify/cookie.js";
+import { createKoaCookieAdapter } from "../adapters/koa/cookie.js";
+import { createHttpCookieAdapter } from "../adapters/universal/cookie.js";
 import {
     CookieSecretRequiredError,
     CookieSecurePrefixError,
@@ -179,8 +179,10 @@ function createStore(config: CookieConfig, io: CookieIo, store: Map<string, Cook
             return result;
         },
         clear(): CookieStore {
+            for (const name of [...store.keys()]) {
+                io.remove(name);
+            }
             store.clear();
-            io.clear();
             return this;
         },
         setSigned(name: string, value: string, options: CookieOptions = {}): CookieStore {

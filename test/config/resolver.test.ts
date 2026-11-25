@@ -301,3 +301,48 @@ describe("deepFreeze - immutability", () => {
         expect(deepFreeze(frozen)).toBe(frozen);
     });
 });
+
+
+describe("resolveConfig - adversarial and boundary inputs", () => {
+    it("does not copy prototype-pollution keys from nested sources", () => {
+        const source = JSON.parse('{"safe":true,"nested":{"__proto__":{"polluted":true},"constructor":{"prototype":{"polluted":true}}}}');
+        const result = resolveConfig({
+            defaults: {},
+            sources: [source],
+            envOverrides: {},
+            cliOverrides: {},
+        }) as any;
+
+        expect(result.safe).toBe(true);
+        expect(result.nested.polluted).toBeUndefined();
+        expect(({} as any).polluted).toBeUndefined();
+    });
+
+    it("does not mutate any input layer while resolving", () => {
+        const defaults = { nested: { first: true }, list: [1, 2] };
+        const source = { nested: { second: true }, list: [3] };
+        const beforeDefaults = structuredClone(defaults);
+        const beforeSource = structuredClone(source);
+
+        resolveConfig({
+            defaults,
+            sources: [source],
+            envOverrides: { nested: { third: true } },
+            cliOverrides: {},
+        });
+
+        expect(defaults).toEqual(beforeDefaults);
+        expect(source).toEqual(beforeSource);
+    });
+
+    it("ignores undefined overrides while preserving explicit null", () => {
+        const result = resolveConfig({
+            defaults: { keep: "value", clear: "value" },
+            sources: [],
+            envOverrides: { keep: undefined, clear: null },
+            cliOverrides: {},
+        });
+
+        expect(result).toEqual({ keep: "value", clear: null });
+    });
+});

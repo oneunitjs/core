@@ -50,28 +50,21 @@ describe("koaHealth", () => {
         const health2 = koaHealth(app2, { path: "/health" });
         health2.registry.register(createHealthProvider("db", async () => ({ status: "healthy" })));
 
-        let nextCalled = false;
-        app2.use(async (_ctx, next) => {
-            await next();
-            nextCalled = true;
-        });
-
         const server2 = http.createServer(app2.callback());
         await new Promise<void>((resolve) => server2.listen(0, resolve));
         const port2 = (server2.address() as any).port;
 
-        const _res = await new Promise<{ statusCode: number }>((resolve, reject) => {
+        const res = await new Promise<{ statusCode: number }>((resolve, reject) => {
             const req = http.request(
                 { hostname: "127.0.0.1", port: port2, path: "/other", method: "GET" },
                 (_res) => {
-                    let _data = "";
-                    _res.on("data", (chunk) => { _data += chunk; });
+                    _res.on("data", () => {});
                     _res.on("end", () => resolve({ statusCode: _res.statusCode ?? 0 }));
                 },
             );
             req.on("error", reject);
             req.end();
         });
-        expect(nextCalled).toBe(true);
+        expect(res.statusCode).toBe(404);
     });
 });

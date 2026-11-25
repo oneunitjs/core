@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createMultipart, fastifyMultipartMiddleware } from "../../src/multipart/index.js";
+import { fastifyMultipartMiddleware } from "../../src/multipart/index.js";
 import Fastify from "fastify";
 
 describe("Multipart - Fastify", () => {
@@ -12,7 +12,6 @@ describe("Multipart - Fastify", () => {
 
     describe("Fastify real server", () => {
         let fastify: Fastify.FastifyInstance;
-        let port: number;
 
         beforeAll(async () => {
             fastify = Fastify();
@@ -42,7 +41,6 @@ describe("Multipart - Fastify", () => {
 
             await fastify.ready();
             await new Promise<void>((resolve) => fastify.server.listen(0, resolve));
-            port = (fastify.server.address() as any).port;
         });
 
         afterAll(async () => {

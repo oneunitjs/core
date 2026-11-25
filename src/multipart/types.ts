@@ -4,7 +4,7 @@ export type MultipartFile = {
     encoding: string;
     mimetype: string;
     size: number;
-    buffer: Buffer;
+    buffer?: Buffer;
     destination?: string;
     filename?: string;
     path?: string;
@@ -29,8 +29,12 @@ export type MultipartOptions = {
     maxFiles?: number;
     /** Maximum number of fields (default: 20) */
     maxFields?: number;
+    /** Maximum aggregate size of all files in a single request in bytes */
+    aggregateSizeLimit?: number;
     /** Allowed file mimetypes (e.g. ["image/jpeg", "image/png"]). Empty array = all allowed */
     allowedMimeTypes?: string[];
+    /** Allowed file content signatures (magic numbers), e.g. [Buffer.from([0xff, 0xd8, 0xff])] for JPEG */
+    fileSignature?: Buffer[];
     /** Upload directory for streamed files (default: memory/buffer) */
     uploadDir?: string;
     /** File filter function: return true to accept the file */

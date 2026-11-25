@@ -4,6 +4,20 @@ import { createHelmet } from "../../src/security/helmet.js";
 import { createCompression } from "../../src/security/compression.js";
 import { createSanitizer } from "../../src/security/sanitize.js";
 
+// Wait for the async compression stream to flush into the mock response.
+const awaitFlush = (res: any): Promise<void> =>
+    new Promise((resolve) => {
+        const tick = (): void => {
+            if (res.finalBody !== undefined) {
+                resolve();
+                return;
+            }
+            setTimeout(tick, 0);
+        };
+        tick();
+        setTimeout(resolve, 1000);
+    });
+
 describe("CORS - Origin Validation", () => {
     it("should allow requests from allowed origin", () => {
         const cors = createCors({ origin: "https://allowed.com" });
@@ -42,13 +56,14 @@ describe("CORS - Origin Validation", () => {
         expect(res["Access-Control-Allow-Origin"]).toBe("https://a.com");
     });
 
-    it("should reflect request origin when credentials enabled and origin is *", () => {
+    it("should not reflect an arbitrary origin when credentials enabled and origin is *", () => {
         const cors = createCors({ origin: "*", credentials: true });
         const middleware = cors.middleware();
         const res: any = { statusCode: 200, setHeader: (k: string, v: string) => { res[k] = v; }, end: () => {} };
         const req: any = { method: "GET", headers: { origin: "https://client.com" } };
         middleware(req, res);
-        expect(res["Access-Control-Allow-Origin"]).toBe("https://client.com");
+        // A wildcard origin is not honoured when credentials are enabled.
+        expect(res["Access-Control-Allow-Origin"]).toBeUndefined();
         expect(res["Access-Control-Allow-Credentials"]).toBe("true");
     });
 
@@ -137,7 +152,7 @@ describe("Helmet - Security Headers", () => {
 });
 
 describe("Compression - Body Compression", () => {
-    it("should compress body with gzip", () => {
+    it("should compress body with gzip", async () => {
         const compression = createCompression({ threshold: 0 });
         const middleware = compression.middleware();
         const res: any = {
@@ -150,11 +165,12 @@ describe("Compression - Body Compression", () => {
         middleware(req, res);
         res.write("Hello World");
         res.end();
+        await awaitFlush(res);
         expect(res["Content-Encoding"]).toBe("gzip");
         expect(require("node:zlib").gunzipSync(res.finalBody).toString()).toBe("Hello World");
     });
 
-    it("should compress body with brotli", () => {
+    it("should compress body with brotli", async () => {
         const compression = createCompression({ threshold: 0 });
         const middleware = compression.middleware();
         const res: any = {
@@ -167,6 +183,7 @@ describe("Compression - Body Compression", () => {
         middleware(req, res);
         res.write("Hello World");
         res.end();
+        await awaitFlush(res);
         expect(res["Content-Encoding"]).toBe("br");
         expect(require("node:zlib").brotliDecompressSync(res.finalBody).toString()).toBe("Hello World");
     });
@@ -188,7 +205,7 @@ describe("Compression - Body Compression", () => {
         expect(res.finalBody.toString()).toBe("small");
     });
 
-    it("should remove Content-Length header when compressing", () => {
+    it("should remove Content-Length header when compressing", async () => {
         const compression = createCompression({ threshold: 0 });
         const middleware = compression.middleware();
         const res: any = {
@@ -202,6 +219,7 @@ describe("Compression - Body Compression", () => {
         middleware(req, res);
         res.write("A".repeat(2000));
         res.end();
+        await awaitFlush(res);
         expect(res["Content-Length"]).toBeUndefined();
     });
 

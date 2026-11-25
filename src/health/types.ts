@@ -17,7 +17,7 @@ export interface HealthCheckResult {
     details?: object;
 }
 
-export type HealthCheck = () => HealthCheckResult | Promise<HealthCheckResult>;
+export type HealthCheck = (opts?: { signal?: AbortSignal }) => HealthCheckResult | Promise<HealthCheckResult>;
 
 export interface HealthProvider {
     name: string;
@@ -29,11 +29,12 @@ export interface HealthRegistry {
     register(provider: HealthProvider): void;
     unregister(name: string): void;
     getAll(): HealthProvider[];
-    checkAll(): Promise<Record<string, HealthCheckResult>>;
+    checkAll(options?: { timeoutMs?: number }): Promise<Record<string, HealthCheckResult>>;
 }
 
 export interface HealthRouteOptions {
     path?: string;
     serviceName?: string;
     includeDetails?: boolean;
+    timeoutMs?: number;
 }

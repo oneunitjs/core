@@ -4,7 +4,6 @@ import Fastify from "fastify";
 
 describe("hooks with Fastify", () => {
     let fastify: any;
-    let port: number;
 
     beforeAll(async () => {
         fastify = Fastify();
@@ -16,7 +15,7 @@ describe("hooks with Fastify", () => {
         hooks.on("onRequest", async (ctx) => {
             events.push(`req:${ctx.req.method} ${ctx.req.url}`);
         });
-        hooks.on("onSend", async (ctx) => {
+        hooks.on("onSend", async (_ctx) => {
             events.push(`send`);
         });
 
@@ -24,8 +23,8 @@ describe("hooks with Fastify", () => {
             await hooks.emit("onRequest", { req, reply });
         });
 
-        fastify.addHook("onSend", async (req, reply, payload) => {
-            await hooks.emit("onSend", { req, reply });
+        fastify.addHook("onSend", async (_req, _reply, _payload) => {
+            await hooks.emit("onSend", { req: _req, reply: _reply });
         });
 
         fastify.get("/hello", async () => {
@@ -34,7 +33,6 @@ describe("hooks with Fastify", () => {
 
         await fastify.ready();
         await new Promise<void>((resolve) => fastify.server.listen(0, resolve));
-        port = (fastify.server.address() as any).port;
     });
 
     afterAll(async () => {

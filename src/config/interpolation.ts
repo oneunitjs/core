@@ -2,6 +2,8 @@ import { ConfigInterpolationError } from "./errors.js";
 
 const PLACEHOLDER_PATTERN = /\$\{([^}:]+)(?::([^}]*))?\}/g;
 
+const UNSAFE_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+
 export function applyInterpolation(
     value: unknown,
     environment: Record<string, string | undefined>,
@@ -17,6 +19,9 @@ export function applyInterpolation(
     if (value !== null && typeof value === "object") {
         const result: Record<string, unknown> = {};
         for (const [key, val] of Object.entries(value)) {
+            if (UNSAFE_KEYS.has(key)) {
+                continue;
+            }
             result[key] = applyInterpolation(val, environment);
         }
         return result;

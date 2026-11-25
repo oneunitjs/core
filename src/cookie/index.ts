@@ -1,15 +1,15 @@
 import {
     createExpressCookieAdapter,
-} from "../adapters/cookie/express.js";
+} from "../adapters/express/cookie.js";
 import {
     createFastifyCookieAdapter,
-} from "../adapters/cookie/fastify.js";
+} from "../adapters/fastify/cookie.js";
 import {
     createKoaCookieAdapter,
-} from "../adapters/cookie/koa.js";
+} from "../adapters/koa/cookie.js";
 import {
     createHttpCookieAdapter,
-} from "../adapters/cookie/http.js";
+} from "../adapters/universal/cookie.js";
 import {
     createCookieStore,
     createCookieStoreFromAdapter,

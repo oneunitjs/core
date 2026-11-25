@@ -152,7 +152,6 @@ describe("createApp - Unified DX", () => {
     // ===== FASTIFY =====
     describe("Fastify real server", () => {
         let fastify: Fastify.FastifyInstance;
-        let port: number;
 
         beforeAll(async () => {
             fastify = Fastify();
@@ -166,7 +165,6 @@ describe("createApp - Unified DX", () => {
 
             await fastify.ready();
             await new Promise<void>((resolve) => fastify.server.listen(0, resolve));
-            port = (fastify.server.address() as any).port;
         });
 
         afterAll(async () => {
@@ -196,7 +194,7 @@ describe("createApp - Unified DX", () => {
 
         beforeAll(async () => {
             app = new Koa();
-            const core = createApp({ serviceName: "koa-test" });
+            createApp({ serviceName: "koa-test" });
 
             app.use(async (ctx) => {
                 if (ctx.path === "/ok") {
@@ -483,7 +481,7 @@ describe("createApp - Unified DX", () => {
                 },
             });
 
-            const middleware = core.multipart({
+            core.multipart({
                 maxFileSize: 5 * 1024 * 1024,
                 maxFiles: 3,
                 allowedMimeTypes: ["image/png"],

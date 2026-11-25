@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createCookieStore, createCookieStoreFromAdapter } from "../../src/cookie/index.js";
-import { createExpressCookieAdapter } from "../../src/adapters/cookie/express.js";
-import { createKoaCookieAdapter } from "../../src/adapters/cookie/koa.js";
-import { createFastifyCookieAdapter } from "../../src/adapters/cookie/fastify.js";
-import { createHttpCookieAdapter } from "../../src/adapters/cookie/http.js";
+import { createExpressCookieAdapter } from "../../src/adapters/express/cookie.js";
+import { createKoaCookieAdapter } from "../../src/adapters/koa/cookie.js";
+import { createFastifyCookieAdapter } from "../../src/adapters/fastify/cookie.js";
+import { createHttpCookieAdapter } from "../../src/adapters/universal/cookie.js";
 
 describe("Cookie Store - Signed Cookies", () => {
     let store: ReturnType<typeof createCookieStore>;
@@ -205,7 +205,7 @@ describe("Cookie Store - Adapters", () => {
             setCookie: (name: string, value: string, options?: Record<string, unknown>) => {
                 reply[name] = { value, options };
             },
-            unsetCookie: (name: string, options?: Record<string, unknown>) => {
+            unsetCookie: (_name: string, _options?: Record<string, unknown>) => {
                 delete reply[name];
             },
         };

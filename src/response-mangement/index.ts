@@ -47,7 +47,7 @@ export type {
     ExpressLikeResponse,
     KoaLikeContext,
     HttpLikeServerResponse,
-} from "../adapters/response/types.js";
+} from "./types.js";
 
 export {
     createFastifyResponseAdapter,

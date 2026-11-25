@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { LifecycleManager } from "../../src/lifecycle/manager.js";
 
 describe("Lifecycle Manager - Mode Switching", () => {
@@ -171,7 +171,7 @@ describe("Lifecycle Manager - Middleware Execution", () => {
         mgr.initialize();
         const order: string[] = [];
         const mw1 = async (_req: unknown, _res: unknown, next: () => void) => { order.push("mw1"); next(); };
-        const mw2 = async (_req: unknown, _res: unknown, next: () => void) => { order.push("mw2"); };
+        const mw2 = async (_req: unknown, _res: unknown, _next: () => void) => { order.push("mw2"); };
         mgr.registerMiddleware("mw1", "type1", mw1, { priority: 2 });
         mgr.registerMiddleware("mw2", "type2", mw2, { priority: 1 });
         const results = await mgr.executeMiddlewareChain({}, {}, "request");

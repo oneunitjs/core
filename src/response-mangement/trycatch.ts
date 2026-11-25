@@ -6,7 +6,7 @@
  * standardized error response using the ResponseManager.
  */
 
-import type { ResponseFrameworkAdapter } from "../adapters/response/types.js";
+import type { ResponseFrameworkAdapter } from "./types.js";
 import { ResponseManager } from "./registry.js";
 
 /**

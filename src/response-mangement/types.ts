@@ -202,10 +202,36 @@ export const SUCCESS_RESPONSES = {
 export type ErrorResponseName = keyof typeof ERROR_RESPONSES;
 export type SuccessResponseName = keyof typeof SUCCESS_RESPONSES;
 
-export type {
-    ResponseFrameworkAdapter,
-    FastifyLikeReply,
-    ExpressLikeResponse,
-    KoaLikeContext,
-    HttpLikeServerResponse,
-} from "../adapters/response/types.js";
+export interface ResponseFrameworkAdapter {
+    name: string;
+    send(options: {
+        status: number;
+        body: unknown;
+        headers?: Record<string, string | string[]>;
+    }): void;
+}
+
+export interface FastifyLikeReply {
+    status(code: number): FastifyLikeReply;
+    send(body: unknown): void;
+    header(key: string, value: string | string[]): FastifyLikeReply;
+}
+
+export interface ExpressLikeResponse {
+    status(code: number): ExpressLikeResponse;
+    json(body: unknown): void;
+    setHeader(key: string, value: string | string[]): void;
+}
+
+export interface KoaLikeContext {
+    status: number;
+    body: unknown;
+    set(key: string, value: string): void;
+}
+
+export interface HttpLikeServerResponse {
+    statusCode: number;
+    writeHead(code: number, headers?: Record<string, string | string[]>): void;
+    end(body?: unknown): void;
+    setHeader(key: string, value: string | string[]): void;
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createMultipart, koaMultipartMiddleware } from "../../src/multipart/index.js";
+import { koaMultipartMiddleware } from "../../src/multipart/index.js";
 import Koa from "koa";
 import http from "node:http";
 

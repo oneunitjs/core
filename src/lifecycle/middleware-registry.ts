@@ -20,11 +20,11 @@ function detectConflict(
     type: string,
     name: string,
     existing: MiddlewareRegistration[],
+    conflictTypes: string[] = MIDDLEWARE_CONFLICT_MATRIX[type] ?? [],
 ): ConflictInfo[] {
     const conflicts: ConflictInfo[] = [];
-    const conflictingTypes = MIDDLEWARE_CONFLICT_MATRIX[type] ?? [];
 
-    for (const existingType of conflictingTypes) {
+    for (const existingType of conflictTypes) {
         const matches = existing.filter(
             (m) => m.type === existingType && m.name !== name,
         );
@@ -102,6 +102,15 @@ export class MiddlewareRegistry {
             };
         }
 
+        if (this.middleware.has(name)) {
+            return {
+                success: false,
+                conflicts: [],
+                headerConflicts: [],
+                error: `Middleware "${name}" is already registered`,
+            };
+        }
+
         if (this.allowedTypes && !this.allowedTypes.has(type)) {
             return {
                 success: false,
@@ -111,14 +120,15 @@ export class MiddlewareRegistry {
             };
         }
 
-        const conflicts = detectConflict(type, name, [...this.middleware.values()]);
+        const conflictTypes = options.conflictTypes ?? (MIDDLEWARE_CONFLICT_MATRIX[type] ?? []);
+        const conflicts = detectConflict(type, name, [...this.middleware.values()], conflictTypes);
 
         const registration: MiddlewareRegistration = {
             name,
             type,
             middleware,
             priority: options.priority ?? 0,
-            conflictTypes: options.conflictTypes,
+            conflictTypes,
             version: options.version ?? "1.0.0",
             trackHeaders: options.trackHeaders,
         };
@@ -179,6 +189,7 @@ export class MiddlewareRegistry {
 
     clear(): void {
         this.middleware.clear();
+        this.terminalMiddleware.clear();
         this.conflicts.length = 0;
         this.headerConflicts.length = 0;
     }
@@ -207,34 +218,47 @@ export class MiddlewareRegistry {
             };
         }
 
-        let timeoutId: NodeJS.Timeout | null = null;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutId = setTimeout(() => {
-                reject(new Error(`Middleware "${name}" timed out`));
-            }, this.executionTimeoutMs);
-        });
+        // Cooperative cancellation: on timeout we abort an AbortSignal that
+        // middleware can observe. Cancellation cannot forcibly stop arbitrary
+        // JavaScript; middleware must check `signal.aborted` and stop itself.
+        const abortController = new AbortController();
+        let timedOut = false;
+        const timeoutId = setTimeout(() => {
+            timedOut = true;
+            abortController.abort(new Error(`Middleware "${name}" timed out after ${this.executionTimeoutMs}ms`));
+        }, this.executionTimeoutMs);
+
+        const execCtx: MiddlewareContext = {
+            ...ctx,
+            signal: abortController.signal,
+        };
 
         try {
-            await Promise.race([
-                reg.middleware(ctx.req, ctx.res, ctx.next),
-                timeoutPromise,
-            ]);
+            await reg.middleware(execCtx.req, execCtx.res, execCtx.next, abortController.signal);
         } catch (err) {
+            clearTimeout(timeoutId);
             return {
                 success: false,
-                aborted: ctx.aborted,
+                aborted: execCtx.aborted,
                 error: err instanceof Error ? err : new Error(String(err)),
                 durationMs: Date.now() - start,
             };
         } finally {
-            if (timeoutId) {
-                clearTimeout(timeoutId);
-            }
+            clearTimeout(timeoutId);
+        }
+
+        if (timedOut) {
+            return {
+                success: false,
+                aborted: execCtx.aborted,
+                error: new Error(`Middleware "${name}" timed out after ${this.executionTimeoutMs}ms`),
+                durationMs: Date.now() - start,
+            };
         }
 
         return {
             success: true,
-            aborted: ctx.aborted,
+            aborted: execCtx.aborted,
             durationMs: Date.now() - start,
         };
     }

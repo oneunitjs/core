@@ -4,7 +4,6 @@ import Fastify from "fastify";
 
 describe("fastifyHealth", () => {
     let fastify: any;
-    let port: number;
 
     beforeAll(async () => {
         fastify = Fastify();
@@ -12,10 +11,9 @@ describe("fastifyHealth", () => {
         health.registry.register(createHealthProvider("db", async () => ({ status: "healthy" }), true));
 
         await fastify.ready();
-        const address = await new Promise<string>((resolve) => {
+        await new Promise<string>((resolve) => {
             fastify.server.listen(0, () => resolve(""));
         });
-        port = (fastify.server.address() as any).port;
     });
 
     afterAll(async () => {
@@ -37,7 +35,6 @@ describe("fastifyHealth", () => {
 
         await fastify2.ready();
         await new Promise<void>((resolve) => fastify2.server.listen(0, resolve));
-        const port2 = (fastify2.server.address() as any).port;
 
         const res = await fastify2.inject({ method: "GET", url: "/health" });
         expect(res.statusCode).toBe(503);

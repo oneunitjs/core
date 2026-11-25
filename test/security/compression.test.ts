@@ -1,6 +1,20 @@
 import { describe, it, expect } from "vitest";
 import { createCompression } from "../../src/security/compression.js";
 
+// Wait for the async compression stream to flush into the mock response.
+const awaitFlush = (res: any): Promise<void> =>
+    new Promise((resolve) => {
+        const tick = (): void => {
+            if (res.finalBody !== undefined) {
+                resolve();
+                return;
+            }
+            setTimeout(tick, 0);
+        };
+        tick();
+        setTimeout(resolve, 1000);
+    });
+
 describe("createCompression", () => {
     it("creates compression middleware", () => {
         const compression = createCompression();
@@ -29,7 +43,7 @@ describe("createCompression", () => {
         expect(compression.shouldCompress(req, res)).toBe(false);
     });
 
-    it("middleware sets Content-Encoding header", () => {
+    it("middleware sets Content-Encoding header", async () => {
         const compression = createCompression({ threshold: 0 });
         const middleware = compression.middleware();
         const res: any = {
@@ -57,13 +71,14 @@ describe("createCompression", () => {
         middleware(req, res);
         res.write("Hello World");
         res.end();
+        await awaitFlush(res);
 
         expect(res["Content-Encoding"]).toBe("gzip");
         expect(res["Vary"]).toBe("Accept-Encoding");
-        expect(require("node:zlib").gunzipSync(res.finalBody).toString()).toBe("Hello World");
+        try { expect(require("node:zlib").gunzipSync(res.finalBody).toString()).toBe("Hello World"); } catch(e: any) { console.log("DEBUG finalBody len:", res.finalBody?.length, "chunks:", res.bodyChunks?.length, "first bytes:", res.finalBody?.subarray(0,20)?.toString("hex")); throw e; }
     });
 
-    it("removes Content-Length header when compressing", () => {
+    it("removes Content-Length header when compressing", async () => {
         const compression = createCompression();
         const middleware = compression.middleware();
         const res: any = {
@@ -92,11 +107,12 @@ describe("createCompression", () => {
         middleware(req, res);
         res.write("A".repeat(2000));
         res.end();
+        await awaitFlush(res);
 
         expect(res["Content-Length"]).toBeUndefined();
     });
 
-    it("negotiates brotli encoding when supported", () => {
+    it("negotiates brotli encoding when supported", async () => {
         const compression = createCompression({ threshold: 0 });
         const middleware = compression.middleware();
         const res: any = {
@@ -122,12 +138,13 @@ describe("createCompression", () => {
         middleware(req, res);
         res.write("Hello World");
         res.end();
+        await awaitFlush(res);
 
         expect(res["Content-Encoding"]).toBe("br");
         expect(require("node:zlib").brotliDecompressSync(res.finalBody).toString()).toBe("Hello World");
     });
 
-    it("does not compress bodies below threshold", () => {
+    it("does not compress bodies below threshold", async () => {
         const compression = createCompression({ threshold: 5000 });
         const middleware = compression.middleware();
         const res: any = {
@@ -153,6 +170,7 @@ describe("createCompression", () => {
         middleware(req, res);
         res.write("small");
         res.end();
+        await awaitFlush(res);
 
         expect(res["Content-Encoding"]).toBeUndefined();
         expect(res.finalBody.toString()).toBe("small");

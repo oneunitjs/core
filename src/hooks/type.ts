@@ -3,6 +3,7 @@ export type HookListener<Context = unknown> = (context: Context) => void | Promi
 export interface HooksOptions {
     throwOnError?: boolean;
     allowedHooks?: readonly string[];
+    maxErrors?: number;
 }
 
 export interface Hooks<Context = unknown, HookName extends string = string> {

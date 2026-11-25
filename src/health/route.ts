@@ -4,24 +4,31 @@ import { createHealthRegistry } from "./registry.js";
 export { createHealthRegistry };
 
 export function createHealthRoute(registry: HealthRegistry, options: HealthRouteOptions = {}): any {
-    const { path = "/health", serviceName = "app", includeDetails = false } = options;
+    const { path = "/health", serviceName = "app", includeDetails = false, timeoutMs } = options;
 
     return async (server: HealthServer) => {
+        const checkOptions = timeoutMs !== undefined ? { timeoutMs } : undefined;
+
         server.get(path, async (_request: any, reply: any) => {
-            const results = await registry.checkAll();
+            const results = await registry.checkAll(checkOptions);
+            const providers = registry.getAll ? registry.getAll() : [];
+            const criticalByName = new Map(providers.map((p: any) => [p.name, p.critical !== false]));
 
             const resultsArray = Object.entries(results);
+            const hasCriticalUnhealthy = resultsArray.some(([name, result]) =>
+                result.status === "unhealthy" && criticalByName.get(name) !== false,
+            );
             const hasUnhealthy = resultsArray.some(([, result]) => result.status === "unhealthy");
             const hasDegraded = resultsArray.some(([, result]) => result.status === "degraded");
 
             let overallStatus: "healthy" | "degraded" | "unhealthy" = "healthy";
-            if (hasUnhealthy) {
+            if (hasCriticalUnhealthy) {
                 overallStatus = "unhealthy";
-            } else if (hasDegraded) {
+            } else if (hasUnhealthy || hasDegraded) {
                 overallStatus = "degraded";
             }
 
-            reply.status(hasUnhealthy ? 503 : 200);
+            reply.status(hasCriticalUnhealthy ? 503 : 200);
 
             const checks: Record<string, { status: string; latency?: number; message?: string }> = {};
             for (const [name, result] of resultsArray) {
@@ -43,7 +50,7 @@ export function createHealthRoute(registry: HealthRegistry, options: HealthRoute
 
         if (includeDetails) {
             server.get(`${path}/details`, async (_request: any, reply: any) => {
-                const results = await registry.checkAll();
+                const results = await registry.checkAll(checkOptions);
                 reply.status(200).send(results);
             });
         }

@@ -71,3 +71,24 @@ export class MultipartParseTimeoutError extends MultipartError {
         this.name = "MultipartParseTimeoutError";
     }
 }
+
+export class MultipartAggregateTooLargeError extends MultipartError {
+    constructor(maxBytes: number, options?: OneUnitErrorOptions) {
+        super(`Aggregate upload too large: max ${maxBytes} bytes`, {
+            code: "MULTIPART_AGGREGATE_TOO_LARGE",
+            details: { maxBytes },
+            ...options,
+        });
+        this.name = "MultipartAggregateTooLargeError";
+    }
+}
+
+export class MultipartInvalidFileTypeError extends MultipartError {
+    constructor(message: string, options?: OneUnitErrorOptions) {
+        super(message, {
+            code: "MULTIPART_INVALID_FILE_TYPE",
+            ...options,
+        });
+        this.name = "MultipartInvalidFileTypeError";
+    }
+}

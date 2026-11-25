@@ -137,7 +137,6 @@ describe("server-only encrypted cookies", () => {
 describe("server-only cookie with framework adapters", () => {
     it("works with express adapter", () => {
         let setHeader: string | undefined;
-        const req: any = { headers: {} };
         const res: any = {
             setHeader: (name: string, value: string) => {
                 setHeader = value;

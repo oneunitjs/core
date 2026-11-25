@@ -120,9 +120,9 @@ describe("Response Framework Manager - Express Adapter", () => {
         const adapter = createExpressResponseAdapter({
             set: () => {},
             status: (code: number) => { res.statusCode = code; return res; },
-            json: () => {},
+            json: () => { res.ended = true; },
             end: () => { res.ended = true; },
-            type: (t: string) => { return res; },
+            type: (_t: string) => { return res; },
             headersSent: false,
         } as any);
         const res: any = {};
@@ -141,7 +141,7 @@ describe("Response Framework Manager - Fastify Adapter", () => {
             code: (code: number) => { res.statusCode = code; return res; },
             header: (key: string, value: string) => { res[key] = value; return res; },
             send: (body: unknown) => { res.body = body; },
-            type: (t: string) => { return res; },
+            type: (_t: string) => { return res; },
         } as any);
         const res: any = {};
         const rfm = createResponseFrameworkManager(manager, adapter);
@@ -194,14 +194,14 @@ describe("Response Framework Manager - Try/Catch Wrapper", () => {
             tryCatchEnabled: true,
             defaultErrorStatusCode: 500,
         });
-        const failingHandler = async (_req: unknown, res: unknown) => {
+        const failingHandler = async (_req: unknown, _res: unknown) => {
             throw new Error("Database connection failed");
         };
         const safeHandler = rfm.wrapHandler(failingHandler);
         await safeHandler({}, res);
         expect(res.statusCode).toBe(500);
         expect(res.body.success).toBe(false);
-        expect(res.body.msg).toBe("Database connection failed");
+        expect(res.body.msg).toBe("Internal Server Error");
     });
 
     it("should not wrap handler when tryCatchEnabled is false", async () => {
@@ -218,7 +218,7 @@ describe("Response Framework Manager - Try/Catch Wrapper", () => {
         const rfm = createResponseFrameworkManager(manager, adapter, {
             tryCatchEnabled: false,
         });
-        const failingHandler = async (_req: unknown, res: unknown) => { throw new Error("Database connection failed"); };
+        const failingHandler = async (_req: unknown, _res: unknown) => { throw new Error("Database connection failed"); };
         const safeHandler = rfm.wrapHandler(failingHandler);
         await expect(safeHandler({}, res)).rejects.toThrow("Database connection failed");
     });

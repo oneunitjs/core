@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createMultipart, httpMultipartMiddleware } from "../../src/multipart/index.js";
+import { httpMultipartMiddleware } from "../../src/multipart/index.js";
 import http from "node:http";
 
 describe("Multipart - node:http", () => {

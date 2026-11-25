@@ -108,7 +108,7 @@ export function createHelmet(options: HelmetOptions = {}): HelmetMiddleware {
         }
 
         if (merged.hsts !== undefined && merged.hsts !== false) {
-            const hsts = typeof merged.hsts === "boolean" ? {} : merged.hsts;
+            const hsts = typeof merged.hsts === "boolean" ? { maxAge: 15552000 } : merged.hsts;
             const parts: string[] = [];
             if (hsts.maxAge !== undefined) parts.push(`max-age=${hsts.maxAge}`);
             if (hsts.includeSubDomains) parts.push("includeSubDomains");

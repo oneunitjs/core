@@ -32,7 +32,9 @@ describe("Health Registry - Registration", () => {
         registry.register({ name: "failing", check: async () => { throw new Error("connection failed"); } });
         const results = await registry.checkAll();
         expect(results.failing.status).toBe("unhealthy");
-        expect(results.failing.message).toContain("connection failed");
+        // Raw internal exception messages must not be leaked publicly.
+        expect(results.failing.message).toBe("Health check failed");
+        expect(results.failing.message).not.toContain("connection failed");
     });
 
     it("should run checks in parallel", async () => {

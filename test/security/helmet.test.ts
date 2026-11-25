@@ -64,3 +64,32 @@ describe("createHelmet", () => {
         expect(headers["Strict-Transport-Security"]).toContain("preload");
     });
 });
+
+
+describe("createHelmet - edge cases", () => {
+    it("does not mutate caller-owned CSP directives", () => {
+        const policy = { "default-src": ["'self'"] };
+        const helmet = createHelmet({ contentSecurityPolicy: policy });
+        helmet.headers();
+        expect(policy["default-src"]).toEqual(["'self'"]);
+    });
+
+    it("omits disabled security headers explicitly", () => {
+        const headers = createHelmet({
+            noSniff: false,
+            frameOptions: undefined,
+            referrerPolicy: undefined,
+            hsts: false,
+        }).headers();
+        expect(headers["X-Content-Type-Options"]).toBeUndefined();
+        expect(headers["Strict-Transport-Security"]).toBeUndefined();
+    });
+
+    it("continues the middleware chain exactly once", () => {
+        const middleware = createHelmet().middleware();
+        const response: any = { setHeader() {} };
+        let calls = 0;
+        middleware({}, response, () => calls++);
+        expect(calls).toBe(1);
+    });
+});

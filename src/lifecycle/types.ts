@@ -19,7 +19,7 @@ export interface LifecycleOptions {
 export interface MiddlewareRegistration {
     name: string;
     type: string;
-    middleware: (_req: unknown, _res: unknown, _next?: () => void) => void | Promise<void>;
+    middleware: (_req: unknown, _res: unknown, _next?: () => void, _signal?: AbortSignal) => void | Promise<void>;
     priority: number;
     conflictTypes?: string[];
     version: string;
@@ -66,6 +66,10 @@ export interface MiddlewareContext {
     phase: "request" | "response" | "error";
     abort: () => void;
     aborted: boolean;
+    /** Abort signal that is triggered when a middleware execution times out.
+     * Middleware should observe it cooperatively; cancellation cannot forcibly
+     * stop arbitrary JavaScript. */
+    signal?: AbortSignal;
 }
 
 export interface PluginContext {

@@ -5,13 +5,11 @@ import type {
 } from "./type.js";
 import {
     DEFAULT_HOOKS,
-    APPLICATION_HOOKS,
-    LIFECYCLE_HOOKS,
     type DefaultHookName,
-    type ApplicationHookName,
-    type LifecycleHookName,
 } from "./default-hooks.js";
 import { HookNotAllowedError } from "../errors/hooks.js";
+
+const DEFAULT_MAX_ERRORS = 100;
 
 class HooksImpl<Context = unknown, HookName extends string = string>
     implements Hooks<Context, HookName>
@@ -19,14 +17,19 @@ class HooksImpl<Context = unknown, HookName extends string = string>
     private readonly store = new Map<string, HookListener<Context>[]>();
     private readonly throwOnError: boolean;
     private readonly allowedHooks: Set<string> | null;
-    private readonly onceWrappers = new Map<HookListener<Context>, HookListener<Context>>();
+    // once-wrappers are keyed by hook name then by the original listener so
+    // that reusing the same callback with `once()` on different hook names
+    // does not overwrite its wrapper mapping.
+    private readonly onceWrappers = new Map<string, Map<HookListener<Context>, HookListener<Context>>>();
     private readonly errors: Error[] = [];
+    private readonly maxErrors: number;
 
     constructor(options: HooksOptions = {}) {
         this.throwOnError = options.throwOnError ?? false;
         this.allowedHooks = options.allowedHooks
             ? new Set(options.allowedHooks)
             : null;
+        this.maxErrors = options.maxErrors ?? DEFAULT_MAX_ERRORS;
     }
 
     private validateHook(name: string): void {
@@ -35,6 +38,13 @@ class HooksImpl<Context = unknown, HookName extends string = string>
                 name,
                 Array.from(this.allowedHooks),
             );
+        }
+    }
+
+    private pushError(err: Error): void {
+        this.errors.push(err);
+        if (this.errors.length > this.maxErrors) {
+            this.errors.shift();
         }
     }
 
@@ -60,8 +70,8 @@ class HooksImpl<Context = unknown, HookName extends string = string>
      * If the hook has no more listeners after removal, the hook entry is deleted.
      */
     off(name: HookName, listener: HookListener<Context>): Hooks<Context, HookName> {
-        const wrapper = this.onceWrappers.get(listener);
-        const target = wrapper ?? listener;
+        const byName = this.onceWrappers.get(name as string);
+        const target = byName?.get(listener) ?? listener;
 
         const existing = this.store.get(name as string);
         if (!existing) {
@@ -71,8 +81,11 @@ class HooksImpl<Context = unknown, HookName extends string = string>
         const index = existing.indexOf(target);
         if (index !== -1) {
             existing.splice(index, 1);
-            if (wrapper) {
-                this.onceWrappers.delete(listener);
+            if (byName) {
+                byName.delete(listener);
+                if (byName.size === 0) {
+                    this.onceWrappers.delete(name as string);
+                }
             }
         }
 
@@ -85,28 +98,43 @@ class HooksImpl<Context = unknown, HookName extends string = string>
 
     once(name: HookName, listener: HookListener<Context>): Hooks<Context, HookName> {
         this.validateHook(name as string);
-        const onceListener: HookListener<Context> = async (context) => {
-            this.off(name, onceListener);
-            this.onceWrappers.delete(listener);
-            await listener(context);
-        };
+        const hookName = name as string;
+        const byName = this.onceWrappers.get(hookName) ?? new Map<HookListener<Context>, HookListener<Context>>();
 
-        this.onceWrappers.set(listener, onceListener);
-        return this.on(name, onceListener);
+        let onceListener: HookListener<Context> | undefined = byName.get(listener);
+        if (!onceListener) {
+            const wrapper: HookListener<Context> = async (context: Context) => {
+                this.off(name, wrapper);
+                byName.delete(listener);
+                if (byName.size === 0) {
+                    this.onceWrappers.delete(hookName);
+                }
+                await listener(context);
+            };
+            onceListener = wrapper;
+            byName.set(listener, wrapper);
+            this.onceWrappers.set(hookName, byName);
+        }
+
+        return this.on(name, onceListener!);
     }
 
     async emit(name: HookName, context: Context): Promise<void> {
         this.validateHook(name as string);
-        const list = this.store.get(name as string);
+        const hookName = name as string;
+        const list = this.store.get(hookName);
         if (!list || list.length === 0) {
             return;
         }
 
-        for (const listener of list) {
+        // Dispatch against a snapshot so that listeners removing themselves
+        // (e.g. once-wrappers) during iteration cannot skip subsequent listeners.
+        const snapshot = [...list];
+        for (const listener of snapshot) {
             try {
                 await listener(context);
             } catch (err) {
-                this.errors.push(err instanceof Error ? err : new Error(String(err)));
+                this.pushError(err instanceof Error ? err : new Error(String(err)));
                 if (this.throwOnError) {
                     throw err;
                 }
@@ -116,16 +144,18 @@ class HooksImpl<Context = unknown, HookName extends string = string>
 
     emitSync(name: HookName, context: Context): void {
         this.validateHook(name as string);
-        const list = this.store.get(name as string);
+        const hookName = name as string;
+        const list = this.store.get(hookName);
         if (!list || list.length === 0) {
             return;
         }
 
-        for (const listener of list) {
+        const snapshot = [...list];
+        for (const listener of snapshot) {
             try {
                 listener(context);
             } catch (err) {
-                this.errors.push(err instanceof Error ? err : new Error(String(err)));
+                this.pushError(err instanceof Error ? err : new Error(String(err)));
                 if (this.throwOnError) {
                     throw err;
                 }
@@ -142,7 +172,8 @@ class HooksImpl<Context = unknown, HookName extends string = string>
     }
 
     listeners(name: HookName): HookListener<Context>[] {
-        return this.store.get(name as string) ?? [];
+        // Return a copy so callers cannot mutate the internal listener array.
+        return [...(this.store.get(name as string) ?? [])];
     }
 
     listenerCount(name: HookName): number {
@@ -156,6 +187,7 @@ class HooksImpl<Context = unknown, HookName extends string = string>
      */
     clear(): Hooks<Context, HookName> {
         this.store.clear();
+        this.onceWrappers.clear();
         return this;
     }
 
@@ -166,6 +198,7 @@ class HooksImpl<Context = unknown, HookName extends string = string>
      */
     clearHook(name: HookName): Hooks<Context, HookName> {
         this.store.delete(name as string);
+        this.onceWrappers.delete(name as string);
         return this;
     }
 

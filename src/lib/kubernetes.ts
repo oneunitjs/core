@@ -44,6 +44,7 @@ async function tryK8sAPI(timeoutMs: number = KUBECTL_TIMEOUT_MS): Promise<{
     const k8sHost = process.env["KUBERNETES_SERVICE_HOST"];
     const k8sPort = process.env["KUBERNETES_SERVICE_PORT"];
     const tokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token";
+    const caPath = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt";
 
     if (!k8sHost || !k8sPort) {
         return { ok: false, error: "no in-cluster K8s env vars" };
@@ -58,6 +59,16 @@ async function tryK8sAPI(timeoutMs: number = KUBECTL_TIMEOUT_MS): Promise<{
             token = undefined;
         }
 
+        let ca: string | undefined;
+        try {
+            const fs = await import("node:fs/promises");
+            ca = await fs.readFile(caPath, "utf8");
+        } catch {
+            ca = undefined;
+        }
+
+        // Never send service-account credentials over an unverified TLS connection.
+        // Load the in-cluster CA certificate and enable certificate verification.
         const options: any = {
             method: "GET",
             hostname: k8sHost,
@@ -65,7 +76,9 @@ async function tryK8sAPI(timeoutMs: number = KUBECTL_TIMEOUT_MS): Promise<{
             path: "/version",
             headers: token ? { Authorization: `Bearer ${token}` } : {},
             timeout: timeoutMs,
-            rejectUnauthorized: false,
+            rejectUnauthorized: true,
+            ...(ca ? { ca } : {}),
+            servername: k8sHost,
         };
 
         return new Promise<{ ok: boolean; error?: string }>((resolve) => {

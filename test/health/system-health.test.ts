@@ -173,7 +173,7 @@ describe("system health providers", () => {
             expect(results.docker).toBeDefined();
             expect(results.kubernetes).toBeDefined();
 
-            for (const [name, result] of Object.entries(results)) {
+            for (const [, result] of Object.entries(results)) {
                 expect(["healthy", "degraded", "unhealthy"]).toContain(result.status);
             }
         }, 20000);
@@ -235,7 +235,7 @@ describe("system health providers", () => {
             const results = await registry.checkAll();
             expect(results.system).toBeDefined();
 
-            for (const [name, result] of Object.entries(results)) {
+            for (const [, result] of Object.entries(results)) {
                 expect(["healthy", "degraded", "unhealthy"]).toContain(result.status);
             }
         }, 20000);

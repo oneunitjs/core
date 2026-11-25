@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createHealth, registerHealth, createHealthProvider, createHealthRoute } from "../../src/index.js";
+import { describe, it, expect } from "vitest";
+import { createHealth, registerHealth, createHealthProvider } from "../../src/index.js";
 import http from "node:http";
 
 type HealthReply = { status: (code: number) => HealthReply; send: (body: unknown) => void };

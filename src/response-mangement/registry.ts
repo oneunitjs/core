@@ -1,25 +1,3 @@
-import type {
-    SuccessOptions,
-    ErrorOptions,
-    ErrorResponseOptions,
-    PaginatedOptions,
-    RespondOptions,
-    ResponseManagementOptions,
-    SuccessResponse,
-    ErrorResponse,
-    FieldError,
-    HttpStatusCodeValue,
-    ErrorResponseName,
-    SuccessResponseName,
-    PaginationMeta,
-    ResponseHeaders,
-    ResponseFrameworkAdapter,
-    FastifyLikeReply,
-    ExpressLikeResponse,
-    KoaLikeContext,
-    HttpLikeServerResponse,
-} from "./types.js";
-// eslint-disable-next-line no-duplicate-imports -- verbatimModuleSyntax requires separate type/value imports
 import {
     HTTP_STATUS,
     isBodylessStatus,
@@ -28,13 +6,39 @@ import {
     isSuccess,
     isRedirection,
     DEFAULT_RESPONSE_CONFIG,
+    type SuccessOptions,
+    type ErrorOptions,
+    type ErrorResponseOptions,
+    type PaginatedOptions,
+    type RespondOptions,
+    type ResponseManagementOptions,
+    type SuccessResponse,
+    type ErrorResponse,
+    type FieldError,
+    type HttpStatusCodeValue,
+    type ErrorResponseName,
+    type SuccessResponseName,
+    type PaginationMeta,
+    type ResponseHeaders,
+    type ResponseFrameworkAdapter,
+    type FastifyLikeReply,
+    type ExpressLikeResponse,
+    type KoaLikeContext,
+    type HttpLikeServerResponse,
 } from "./types.js";
+import { randomBytes } from "node:crypto";
 import {
     createExpressResponseAdapter,
+} from "../adapters/express/response.js";
+import {
     createFastifyResponseAdapter,
+} from "../adapters/fastify/response.js";
+import {
     createKoaResponseAdapter,
+} from "../adapters/koa/response.js";
+import {
     createHttpResponseAdapter,
-} from "../adapters/response/index.js";
+} from "../adapters/universal/response.js";
 import { InvalidStatusCodeError } from "../errors/response.js";
 
 export { createExpressResponseAdapter, createFastifyResponseAdapter, createKoaResponseAdapter, createHttpResponseAdapter };
@@ -196,15 +200,44 @@ export class ResponseFrameworkManager {
             try {
                 await handler(req, res, next);
             } catch (err: any) {
-                const message = err?.message ?? "Internal Server Error";
+                const correlationId = randomBytes(8).toString("hex");
+
+                // Log the full error internally with a correlation ID so the
+                // original exception is never leaked to the client.
+                console.error(
+                    `[oneunit:response:${correlationId}] Unhandled handler error:`,
+                    err instanceof Error ? err.stack ?? err.message : String(err),
+                );
+
+                let status = this.defaultErrorStatusCode;
+                let message: string;
+
+                // Explicitly classified client errors may expose a safe message.
+                if (
+                    err?.statusCode &&
+                    err.statusCode >= 400 &&
+                    err.statusCode < 500 &&
+                    err.expose !== false
+                ) {
+                    status = err.statusCode;
+                    message =
+                        typeof err.message === "string" && err.message.length > 0
+                            ? err.message
+                            : "Error";
+                } else if (typeof err?.publicMessage === "string" && err.publicMessage.length > 0) {
+                    message = err.publicMessage;
+                } else {
+                    message = "Internal Server Error";
+                }
 
                 const errorResponse = this.manager.error({
-                    status: this.defaultErrorStatusCode,
+                    status,
                     message,
+                    metadata: { requestId: correlationId },
                 });
 
                 this.adapter.send({
-                    status: this.defaultErrorStatusCode,
+                    status,
                     body: errorResponse,
                     headers: { "content-type": "application/json" },
                 });

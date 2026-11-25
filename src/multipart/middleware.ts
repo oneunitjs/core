@@ -19,6 +19,8 @@ export function createMultipart(options: MultipartOptions = {}): MultipartMiddle
         tmpdir: options.tmpdir,
         headersLimit: options.headersLimit,
         timeoutMs: options.timeoutMs,
+        fileSignature: options.fileSignature,
+        aggregateSizeLimit: options.aggregateSizeLimit,
     };
 
     let enabled = true;

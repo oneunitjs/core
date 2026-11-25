@@ -15,7 +15,7 @@ import {
 } from "./types.js";
 import { MiddlewareRegistry } from "./middleware-registry.js";
 import { PluginSystem } from "./plugin-system.js";
-import type { FrameworkType } from "../adapters/types.js";
+import type { FrameworkType } from "../adapters/express/types.js";
 
 export class LifecycleManager {
     private mode: LifecycleMode;
@@ -271,10 +271,11 @@ export class LifecycleManager {
      * hook, Koa middleware, node:http request listener).
      */
     createLifecycleMiddleware(_framework: FrameworkType = "express"): any {
-        const registrations = this.middleware.list();
-
-        // Create a combined middleware that runs all registered middleware in order
+        // Create a combined middleware that runs all registered middleware in order.
+        // Registrations are resolved at execution time so middleware registered
+        // after this middleware was created is still included in the chain.
         return async (req: any, res: any, next?: any) => {
+            const registrations = this.middleware.list();
             const ctx: MiddlewareContext = {
                 req,
                 res,

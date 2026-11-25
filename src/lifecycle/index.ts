@@ -6,7 +6,7 @@ export {
     FastifyMiddlewareAdapter,
     KoaMiddlewareAdapter,
     HttpMiddlewareAdapter,
-} from "../adapters/middleware/index.js";
+} from "../adapters/express/middleware.js";
 export type {
     LifecycleMode,
     LifecycleOptions,
@@ -24,7 +24,7 @@ export type {
     FrameworkType,
     FrameworkAdapter,
     AdaptedMiddleware,
-} from "../adapters/types.js";
+} from "../adapters/express/types.js";
 export {
     DEFAULT_LIFECYCLE_OPTIONS,
     EASY_MODE_DEFAULTS,

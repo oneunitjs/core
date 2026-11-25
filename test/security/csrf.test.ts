@@ -5,7 +5,7 @@ describe("CSRF - Token Generation", () => {
     it("should generate cryptographically random tokens", () => {
         const csrf = createCsrf();
         const token = csrf.generateToken();
-        expect(token).toMatch(/^[0-9a-f]{64}$/);
+        expect(token).toMatch(/^[0-9a-f]{64}\.[0-9a-f]{64}$/);
         expect(csrf.generateToken()).not.toBe(token);
     });
 

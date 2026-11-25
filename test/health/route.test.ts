@@ -153,3 +153,32 @@ describe("createHealthRoute", () => {
         expect(registered).toContain("/health/details");
     });
 });
+
+
+describe("createHealthRoute - response contract edge cases", () => {
+    it("does not leak provider details when includeDetails is false", async () => {
+        const registry = {
+            checkAll: async () => ({
+                database: { status: "degraded", latency: 12, message: "private connection string", details: { host: "db.internal" } },
+            }),
+            getAll: () => [],
+        } as any;
+        const server = mockServer();
+        await createHealthRoute(registry, { includeDetails: false })(server as any);
+        const reply = makeReply();
+        await server._handler!({}, reply);
+        const serialized = JSON.stringify(reply.body);
+        expect(serialized).not.toContain("private connection string");
+        expect(serialized).not.toContain("db.internal");
+    });
+
+    it("uses the configured path for both health and details endpoints", async () => {
+        const registry = { checkAll: async () => ({}), getAll: () => [] } as any;
+        const registered: string[] = [];
+        const server = {
+            get(path: string) { registered.push(path); },
+        } as any;
+        await createHealthRoute(registry, { path: "/internal/health", includeDetails: true })(server);
+        expect(registered).toEqual(["/internal/health", "/internal/health/details"]);
+    });
+});

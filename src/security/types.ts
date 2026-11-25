@@ -26,6 +26,8 @@ export type CsrfOptions = {
         maxAge?: number;
     };
     ignoreMethods?: string[];
+    /** Bind issued tokens to an authenticated session identifier. */
+    sessionId?: (req: unknown) => string | undefined;
 };
 
 export type SanitizeOptions = {
@@ -88,7 +90,7 @@ export interface SecurityMiddleware {
 
 export interface CorsMiddleware extends SecurityMiddleware {
     middleware(): (req: unknown, res: unknown, next?: () => void) => void;
-    headers(): Record<string, string>;
+    headers(): { headers: Record<string, string>; varyOrigin: boolean };
 }
 
 export interface CsrfMiddleware extends SecurityMiddleware {
@@ -131,6 +133,8 @@ export interface RateLimitMiddleware extends SecurityMiddleware {
 export interface RateLimitOptions {
     windowMs?: number;
     maxRequests?: number;
+    maxKeys?: number;
+    trustProxy?: boolean;
     keyGenerator?: (req: unknown) => string;
     message?: string;
     statusCode?: number;

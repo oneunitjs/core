@@ -89,7 +89,7 @@ describe("createApp - Simplified DX API", () => {
         it("should chain multiple middleware registrations", () => {
             const app = createApp({ serviceName: "test", secret: "secret" });
 
-            const result = app
+            app
                 .use(app.cors({ origin: "*" }))
                 .use(app.csrf({ secret: "my-secret" }))
                 .use(app.helmet());
