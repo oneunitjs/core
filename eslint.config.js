@@ -3,7 +3,7 @@ import tseslint from "@typescript-eslint/eslint-plugin";
 
 export default [
     {
-        files: ["src/**/*.ts", "test/**/*.ts"],
+        files: ["src/**/*.ts", "test/**/*.ts", "app/create-oneunit/src/**/*.ts", "app/create-oneunit/test/**/*.ts"],
         languageOptions: {
             parser: tsParser,
             parserOptions: {

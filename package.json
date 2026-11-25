@@ -36,13 +36,17 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:cli": "tsc -p app/create-oneunit/tsconfig.json",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src test --ext .ts",
-    "prepublishOnly": "npm run build"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p app/create-oneunit/tsconfig.json",
+    "lint": "eslint src test app/create-oneunit/src app/create-oneunit/test --ext .ts",
+    "prepublishOnly": "npm run build && npm run build:cli"
   },
   "files": [
     "dist/"
+  ],
+  "workspaces": [
+    "app/create-oneunit"
   ],
   "keywords": [],
   "author": "",

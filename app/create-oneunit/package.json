@@ -1,0 +1,25 @@
+{
+  "name": "create-oneunit",
+  "version": "1.0.0",
+  "description": "Scaffold a new project using @oneunit/core with a chosen web framework (express, fastify, or koa).",
+  "main": "dist/index.js",
+  "bin": {
+    "create-oneunit": "./bin/create-oneunit.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "templates"
+  ],
+  "scripts": {
+    "build": "tsc"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}
